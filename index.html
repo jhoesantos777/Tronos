@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Porto Esperança — TRONOS</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0a0a0c" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="TRONOS" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-180.png" />
+  <link rel="icon" href="assets/icons/icon-192.png" />
+
+  <!-- React 18 (UMD) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Tailwind (CDN, utilitários core) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    html, body { margin: 0; padding: 0; background: #0a0a0c; overscroll-behavior: none; }
+    * { -webkit-tap-highlight-color: transparent; }
+    #root { min-height: 100vh; min-height: 100dvh; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- Jogo (compilado) -->
+  <script src="assets/game.js"></script>
+
+  <!-- Bootstrap -->
+  <script>
+    (function () {
+      var App = window.TRONOS_App;
+      var root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(React.createElement(App));
+
+      // Registrar service worker (offline)
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", function () {
+          navigator.serviceWorker.register("service-worker.js").catch(function () {});
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

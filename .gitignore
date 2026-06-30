@@ -1,0 +1,7 @@
+# Build intermediário (gerado pelo compile-tronos.cjs)
+assets/game.candidate.js
+# Backup do bundle antigo
+assets/game.original.js
+# Sistema
+.DS_Store
+Thumbs.db
