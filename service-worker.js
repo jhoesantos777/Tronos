@@ -1,10 +1,16 @@
 // TRONOS — Service Worker (cache para jogo offline)
-const CACHE = "tronos-v70-trilha-sonora";
+const CACHE = "tronos-v74-rostos-chefes";
 const CORE = [
   "./index.html",
   "./manifest.json",
   "./assets/game.js",
   "./assets/audio/trilha.mp3",
+  "./assets/faccoes/simbolo_cs.png",
+  "./assets/faccoes/simbolo_fd.png",
+  "./assets/faccoes/simbolo_cv.png",
+  "./assets/faccoes/chefe_cs.jpg",
+  "./assets/faccoes/chefe_fd.jpg",
+  "./assets/faccoes/chefe_cv.jpg",
   "https://unpkg.com/react@18/umd/react.production.min.js",
   "https://unpkg.com/react-dom@18/umd/react-dom.production.min.js",
   "https://cdn.tailwindcss.com",

@@ -3995,6 +3995,26 @@ const RIVAL_AI = {
     fears: [], hates: ["fd", "cs"],
     desc: "Agressora e impaciente. Ataca tudo, defende pouco. Drama puro." },
 };
+// ============ FICHA DAS FACÇÕES (dossiê com rosto do chefe + símbolo) ============
+// face  → rosto do chefe da facção   (assets/faccoes/chefe_<id>.jpg)   800×800 px (1:1)
+// symbol→ emblema/símbolo da facção  (assets/faccoes/simbolo_<id>.png) 300×300 px PNG transparente
+const FACTION_DOSSIER = {
+  cs: {
+    boss: "Aurélio “Naja” Bastos", role: "Chefe do Comando Serpente", territory: "Zona Norte",
+    face: "assets/faccoes/chefe_cs.jpg", symbol: "assets/faccoes/simbolo_cs.png",
+    lore: "Subiu matando na régua do norte. Leal aos seus, implacável com traidores. Acredita que território se toma na porrada e se mantém no medo.",
+  },
+  fd: {
+    boss: "Dom Heitor Vasconcelos", role: "Patriarca da Falange D'Ouro", territory: "Porto & Contrabando",
+    face: "assets/faccoes/chefe_fd.jpg", symbol: "assets/faccoes/simbolo_fd.png",
+    lore: "Terno impecável, sorriso de negociante. Manda no porto e no dinheiro que passa por ele. Prefere comprar um inimigo a enterrá-lo — mas faz os dois.",
+  },
+  cv: {
+    boss: "Jordan", role: "Comando d'Os Corvos", territory: "Zona Leste",
+    face: "assets/faccoes/chefe_cv.jpg", symbol: "assets/faccoes/simbolo_cv.png",
+    lore: "Cresce na sombra do leste, semeia caos e desaparece. Calculista e paciente — quando Os Corvos aparecem, já é tarde demais.",
+  },
+};
 // Dinâmica de turnos: cada rival tem uma "temperatura" (quanto quer agir) que sobe/desce
 const rivalTurn = (s, f) => {
   const ri = RIVAL_AI[f];
@@ -4123,6 +4143,17 @@ const rivalPower = (s, fId) => {
   const zones = s.terr.filter(t => t.owner === fId);
   const str = zones.reduce((a, z) => a + z.str, 0);
   return { count: zones.length, str, wealth: s.rivalState[fId].wealth };
+};
+// Poder militar total do jogador — usado para comparar com a força de uma facção rival.
+// Uma facção rival só toma território/derruba o trono se a força dela superar este valor.
+const playerPower = (s) => {
+  const meKey = s.mode === "pl" ? "pl" : "me";
+  const zoneStr = s.terr.reduce((a, t) => a + (t.owner === meKey ? (t.str || 0) : 0), 0);
+  const troops = armyTotal(s.army || { b:0, a:0, d:0, e:0 });
+  const quality = wDef(s) || 1;                                            // qualidade defensiva média da tropa
+  const equip = typeof militaryEquipDef === "function" ? militaryEquipDef(s) : 1;  // bônus de equipamento
+  const moraleF = 0.6 + (s.morale || 50) / 250;                            // 0.6–1.0 conforme a moral
+  return zoneStr + troops * quality * equip * moraleF;
 };
 // IA: cada rival decide sua ação na semana
 function aiTurn(s) {
@@ -4555,6 +4586,7 @@ export default function App() {
   const [showPolitics, setShowPolitics] = useState(false);
   const [showIntl, setShowIntl] = useState(false);
   const [showForces, setShowForces] = useState(false);
+  const [facDossier, setFacDossier] = useState(null); // ficha da facção rival aberta (id: cs/fd/cv)
   const [showCommand, setShowCommand] = useState(false);
   const [showCities, setShowCities] = useState(false);
   const [showMissions, setShowMissions] = useState(false);
@@ -6764,7 +6796,12 @@ export default function App() {
             ev.push({ tone:"good", text:`🎭 DESINFORMAÇÃO: o ${BASE_FAC[f].name} invadiu um galpão vazio perto de ${tn}. A isca funcionou.` });
           } else {
           const def = defAt(pick.to);
-          if (atk > def) {
+          // REGRA: uma facção rival só toma território / derruba o trono se o PODER TOTAL dela
+          // for maior que o do jogador. Caso contrário, o jogador sempre repele.
+          const rivPow = rivalPower(s, f).str;
+          const myPow = playerPower(s);
+          const overpowered = rivPow > myPow;
+          if (atk > def && overpowered) {
             const lost = Math.ceil(defOf() * 0.4);
             tgt.owner = f; tgt.str = Math.ceil(atk * 0.6);
             takeLosses(s, lost);
@@ -6775,6 +6812,12 @@ export default function App() {
             if (!s.vendetta[f].zone) s.vendetta[f].zone = pick.to;
             ev.push({ tone:"bad", text:`✖ ${BASE_FAC[f].name.toUpperCase()}${rivTag.toUpperCase()} INVADIU ${tn.toUpperCase()} (${lost} baixas).` });
             if (!isPol && pick.to === s.throne) bossFalls(false, f);
+          } else if (atk > def && !overpowered) {
+            // Venceu o confronto local, mas não tem força total para dominar você: só arranha a defesa.
+            s.terr[pick.from].str = Math.max(3, s.terr[pick.from].str - 2);
+            s.morale = Math.min(100, s.morale + 2);
+            addGrudge(s, f, 10, `Tentou invadir ${tn}`);
+            ev.push({ tone:"good", text:`🛡 ${BASE_FAC[f].name}${rivTag} atacou ${tn}, mas sua força superior segurou a zona.` });
           } else {
             s.terr[pick.from].str = Math.max(3, s.terr[pick.from].str - 3);
             s.morale = Math.min(100, s.morale + 3);
@@ -11071,9 +11114,11 @@ export default function App() {
                 const vd = g.vendetta && g.vendetta[f];
                 const grudge = vd ? vd.grudge : 0;
                 return (
-                  <div key={f} className="rounded-lg p-2 flex-1" style={{ background:C.panel2, border:`2px solid ${grudge >= 30 ? "#C82C2C" : ri.color}` }}>
-                    <div className="font-mono text-xs" style={{ color:ri.color }}>
-                      {ri.icon} {ri.name}
+                  <button key={f} onClick={() => { Audio.play("tap"); setFacDossier(f); }}
+                    className="pe-btn rounded-lg p-2 flex-1 text-left" style={{ background:C.panel2, border:`2px solid ${grudge >= 30 ? "#C82C2C" : ri.color}` }}>
+                    <div className="font-mono text-xs flex items-center justify-between" style={{ color:ri.color }}>
+                      <span>{ri.icon} {ri.name}</span>
+                      <span style={{ fontSize:9, color:C.mut }}>ficha ▸</span>
                     </div>
                     <div className="font-mono" style={{ fontSize:10, color:C.text }}>
                       {zones} zonas · atividade <span style={{ color:heatCol }}>{heat}</span>
@@ -11086,7 +11131,7 @@ export default function App() {
                     ) : (
                       <div className="font-mono" style={{ fontSize:9, color:C.mut }}>{ri.desc}</div>
                     )}
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -11097,6 +11142,78 @@ export default function App() {
             )}
           </div>
         )}
+
+        {/* === FICHA DA FACÇÃO (dossiê: rosto do chefe + símbolo) === */}
+        {facDossier && (() => {
+          const f = facDossier;
+          const ri = RIVAL_AI[f] || {};
+          const dos = FACTION_DOSSIER[f] || {};
+          const col = ri.color || C.warn;
+          const zones = g.terr.filter(t => t.owner === f).length;
+          const hate = (g.rivalHate && g.rivalHate[f]) || 0;
+          const ht = hateTier(hate);
+          const temp = (g.rivalTemp && g.rivalTemp[f]) || 0.5;
+          const atividade = temp < 0.3 ? "baixa" : temp < 0.7 ? "média" : "ALTA";
+          return (
+            <div onClick={() => setFacDossier(null)}
+              style={{ position:"fixed", inset:0, zIndex:95, background:"rgba(2,3,6,0.92)", display:"flex", alignItems:"center", justifyContent:"center", padding:12 }}>
+              <div onClick={e => e.stopPropagation()}
+                style={{ width:"100%", maxWidth:420, maxHeight:"92vh", overflowY:"auto", background:"#0b0e15", border:`2px solid ${col}`, borderRadius:14, boxShadow:`0 0 30px ${col}55` }}>
+                {/* Cabeçalho: símbolo + nome da facção */}
+                <div className="flex items-center gap-3" style={{ padding:"14px 16px 10px", borderBottom:`1px solid ${C.line}` }}>
+                  <div style={{ position:"relative", width:56, height:56, flexShrink:0 }}>
+                    <div className="flex items-center justify-center" style={{ position:"absolute", inset:0, borderRadius:10, background:col + "22", fontSize:30 }}>{ri.icon}</div>
+                    <img src={dos.symbol} alt="" onError={e => { e.target.style.display = "none"; }}
+                      style={{ position:"relative", width:56, height:56, objectFit:"contain", borderRadius:10 }} />
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div className="font-mono font-bold" style={{ fontSize:14, color:col, letterSpacing:"0.05em" }}>{ri.name}</div>
+                    <div className="font-mono" style={{ fontSize:10, color:C.mut }}>{dos.territory} · {zones} zona{zones !== 1 ? "s" : ""}</div>
+                  </div>
+                  <button onClick={() => setFacDossier(null)} className="font-mono" style={{ fontSize:18, color:C.mut, background:"none", border:"none", cursor:"pointer", lineHeight:1 }}>✕</button>
+                </div>
+                {/* Rosto do chefe (800×800 px recomendado) */}
+                <div style={{ position:"relative", width:"100%", aspectRatio:"1 / 1", background:`linear-gradient(160deg, ${col}22, #05070c)` }}>
+                  <div className="flex flex-col items-center justify-center" style={{ position:"absolute", inset:0, gap:6 }}>
+                    <div style={{ fontSize:72, opacity:0.5 }}>{ri.icon}</div>
+                    <div className="font-mono" style={{ fontSize:9, color:C.mut, letterSpacing:"0.1em" }}>ROSTO DO CHEFE</div>
+                  </div>
+                  <img src={dos.face} alt="" onError={e => { e.target.style.display = "none"; }}
+                    style={{ position:"relative", width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
+                  {/* faixa com o nome do chefe sobre a imagem */}
+                  <div style={{ position:"absolute", left:0, right:0, bottom:0, padding:"18px 14px 10px",
+                    background:"linear-gradient(to top, rgba(5,7,12,0.95), transparent)" }}>
+                    <div className="font-mono font-bold" style={{ fontSize:16, color:"#fff", lineHeight:1.1 }}>{dos.boss}</div>
+                    <div className="font-mono" style={{ fontSize:10, color:col }}>{dos.role}</div>
+                  </div>
+                </div>
+                {/* Informações */}
+                <div style={{ padding:14 }}>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <div className="rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${C.line}` }}>
+                      <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.08em" }}>OBJETIVO</div>
+                      <div className="font-mono font-bold" style={{ fontSize:11, color:C.text, textTransform:"capitalize" }}>{ri.objective || "—"}</div>
+                    </div>
+                    <div className="rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${C.line}` }}>
+                      <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.08em" }}>AMBIÇÃO</div>
+                      <div className="font-mono font-bold" style={{ fontSize:11, color:C.text, textTransform:"capitalize" }}>{ri.ambition || "—"}</div>
+                    </div>
+                    <div className="rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${C.line}` }}>
+                      <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.08em" }}>ATIVIDADE</div>
+                      <div className="font-mono font-bold" style={{ fontSize:11, color: temp >= 0.7 ? "#C82C2C" : temp >= 0.3 ? "#D9822B" : "#4A8A4A" }}>{atividade}</div>
+                    </div>
+                    <div className="rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${C.line}` }}>
+                      <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.08em" }}>RANCOR CONTRA VOCÊ</div>
+                      <div className="font-mono font-bold" style={{ fontSize:11, color: ht.war ? "#C82C2C" : C.text }}>{ht.icon} {ht.label}</div>
+                    </div>
+                  </div>
+                  <div className="font-mono" style={{ fontSize:11, color:C.text, lineHeight:1.5 }}>{dos.lore}</div>
+                  {ri.desc && <div className="font-mono mt-2" style={{ fontSize:9.5, color:C.mut, fontStyle:"italic" }}>{ri.desc}</div>}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {!g.over && (
           <div className="fixed bottom-0 left-0 right-0 p-3 flex items-center gap-3" style={{ background:C.bg, borderTop:`1px solid ${C.line}` }}>
