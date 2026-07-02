@@ -1,5 +1,5 @@
 // TRONOS — Service Worker (cache para jogo offline)
-const CACHE = "tronos-v74-rostos-chefes";
+const CACHE = "tronos-v80-caixa-territorio";
 const CORE = [
   "./index.html",
   "./manifest.json",

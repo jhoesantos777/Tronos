@@ -67,6 +67,11 @@ const T_CLASSE = CITY_DATA.map(c => c.classe);
 const T_RECURSO = CITY_DATA.map(c => c.recurso);
 const T_CAPITAL = CITY_DATA.findIndex(c => c.cap);
 const tierProd = [0, 2, 3, 5];
+// Arrecadação semanal (R$ mil) que CADA território gera para quem o domina.
+// A caixa da facção é a soma disto sobre as zonas dominadas — perder a zona = perder a renda.
+// É também o valor de "movimentação semanal" exibido no dossiê de investigação.
+const ZONE_REVENUE_TIER = [0, 8, 16, 28]; // por T_TIER: 1=pobre, 2=médio, 3=rico
+const zoneRevenue = zi => ZONE_REVENUE_TIER[T_TIER[zi] || 1] || 8;
 // produção real por classe (usada na economia)
 const CLASSE_PROD = { S:5, A:4, B:3, C:2, D:1 };
 // nomes das 6 regiões e cores
@@ -200,6 +205,34 @@ const investigationRank = score => {
   if (score > 0)    return { label:"PRELIMINAR", cor:"#C9933F" };
   return { label:"SEM DADOS", cor:"#7a6a48" };
 };
+// ---- Inteligência do dossiê (v78): o que a investigação revela sobre a zona ----
+// Gerentes de área: nome fictício estável por zona (não muda entre aberturas do dossiê)
+const AREA_MANAGERS = [
+  "Waldir “Marreta” Nunes", "Célio “Sombra” Prado", "Tonho “Fumaça” Reis",
+  "Ivo “Cebola” Martins", "Dandinho da Baixada", "Rui “Tigrão” Salles",
+  "Percival “Doutor” Gomes", "Neno “Pistola” Farias", "Zico do Alemão",
+  "Careca de Ouro", "Betão “Sussurro” Lima", "Gugu “Trator” Mendes",
+];
+const TACTIC_LABEL = { frontal:"⚡ Ataque Frontal", emboscada:"🌙 Emboscada" };
+// Monta a ficha de inteligência da zona: efetivo, força, movimentação semanal,
+// gerente da área e a fraqueza tática (que dá bônus se o jogador atacar por ela).
+// Gerente e fraqueza são determinísticos por zona; números refletem o estado atual.
+function buildDossierIntel(s, zi) {
+  const t = s.terr[zi] || {};
+  const owner = t.owner || "nt";
+  const str = Math.max(2, t.str || T_TIER[zi] || 2);
+  const tier = T_TIER[zi] || 1;
+  const isNt = owner === "nt";
+  return {
+    owner,
+    soldados: isNt ? Math.round(str * 2) : Math.round(str * 3 + (zi % 3)),
+    forca: str,
+    forcaEfetiva: Math.round(str * 1.3),
+    movimenta: zoneRevenue(zi),   // mesma arrecadação semanal que o território gera para o dono
+    gerente: isNt ? "células locais sem comando fixo" : AREA_MANAGERS[(zi * 7 + 3) % AREA_MANAGERS.length],
+    weakness: ((zi + tier) % 2 === 0) ? "frontal" : "emboscada",
+  };
+}
 // Bases militares: instaladas em cidades à escolha do jogador, reforçam a proteção local.
 // Custo de instalação + manutenção semanal. Limite por cidade: 1.
 const MILITARY_BASE = {
@@ -1307,15 +1340,20 @@ function rollOccurrence(s) {
   if (!myZones.length) return null;
   // zonas com mais efetivo alocado têm menos ocorrências
   const garrison = s.garrison || {};
-  // chance base 0.35, reduzida pela proteção média
+  // chance base 0.35, reduzida pela proteção média e AUMENTADA por zonas negligenciadas
+  // (sem base militar e sem investimento em segurança → roubos e ocorrências frequentes)
+  const isNeglected = z => !(s.bases && s.bases[z]) && (((s.civic && s.civic[z]) || {}).segInvest || 0) < 15;
   const totalGarrison = Object.values(garrison).reduce((a, g) => a + (Array.isArray(g) ? g.length : 0), 0);
-  const protectionFactor = Math.max(0.12, 0.35 - totalGarrison * 0.02);
+  const neglectedCount = myZones.filter(isNeglected).length;
+  const protectionFactor = Math.min(0.65, Math.max(0.12, 0.35 - totalGarrison * 0.02 + neglectedCount * 0.05));
   if (Math.random() > protectionFactor) return null;
-  // sorteia preferindo zonas DESPROTEGIDAS
+  // sorteia preferindo zonas DESPROTEGIDAS (pouca guarda, sem base, sem investimento)
   const weighted = [];
   for (const z of myZones) {
     const guard = (garrison[z] && garrison[z].length) || 0;
-    const weight = Math.max(1, 4 - guard); // menos guarda = mais peso
+    let weight = Math.max(1, 4 - guard); // menos guarda = mais peso
+    if (isNeglected(z)) weight += 3;     // negligência atrai crime de rua
+    else weight = Math.max(1, weight - 1);
     for (let w = 0; w < weight; w++) weighted.push(z);
   }
   const z = weighted[Math.floor(Math.random() * weighted.length)];
@@ -4155,6 +4193,18 @@ const playerPower = (s) => {
   const moraleF = 0.6 + (s.morale || 50) / 250;                            // 0.6–1.0 conforme a moral
   return zoneStr + troops * quality * equip * moraleF;
 };
+// Força DEFENSIVA do trono = poder do jogador + fortificações compradas.
+// (segurança particular / bunker / rota de fuga / general leal)
+const throneForce = (s) => {
+  let f = playerPower(s);
+  f += (s.guards || 0) * 2;      // segurança particular contratada
+  if (s.bunker) f *= 1.5;        // bunker reforçado
+  if (s.escape) f *= 1.15;       // rota de fuga complica o cerco
+  if (s.loyalGen) f *= 1.1;      // general leal reforça o trono
+  return Math.round(f);
+};
+// Poder de investida da POLÍCIA sobre o trono — cresce com o nível de procurado (heat).
+const policeAssaultPower = (s) => Math.round(policeStr(s.turn) * (1 + (s.heat || 0) / 100));
 // IA: cada rival decide sua ação na semana
 function aiTurn(s) {
   const isPolice = s.mode === "pl";
@@ -4334,6 +4384,22 @@ function rollOffers(cr) {
   return pool.sort(() => Math.random() - 0.5).slice(0, Math.min(3, pool.length));
 }
 
+// Escolhe qual facção assume um território quando o crime chega a 100% (modo polícia).
+// Prioriza a facção com mais zonas vizinhas; se não houver vizinho de facção, a mais forte do estado avança.
+function pickDominatingFaction(s, i) {
+  const counts = {};
+  for (const a of (ADJ[i] || [])) {
+    const ow = s.terr[a] && s.terr[a].owner;
+    if (ow && AI_ALL.includes(ow)) counts[ow] = (counts[ow] || 0) + 1;
+  }
+  let best = null, bestN = 0;
+  for (const f of AI_ALL) { if ((counts[f] || 0) > bestN) { best = f; bestN = counts[f]; } }
+  if (best) return best;
+  let strongest = AI_ALL[0], sCount = -1;
+  for (const f of AI_ALL) { const n = s.terr.filter(t => t.owner === f).length; if (n > sCount) { strongest = f; sCount = n; } }
+  return strongest;
+}
+
 // ============ MODO LIVRE POLÍCIA V3 — MOTOR DE RECÁLCULO SEMANAL ============
 // Recalcula cada cidade e o estado a partir das forças policiais, facções e recursos.
 // É chamado ao fim do turno no modo polícia, ANTES dos sistemas existentes,
@@ -4354,7 +4420,7 @@ function recalcSecurity(s, ev) {
   s.civic.forEach((c, i) => {
     const t = s.terr[i];
     const ownerFac = t && t.owner !== "pl" && t.owner !== "nt";
-    const hasBase = s.milBases && s.milBases[i];
+    const hasBase = s.bases && s.bases[i];
     // presença policial: guarnição + patrulha distribuída + tecnologia (cresce gradualmente onde há ocupação)
     const garr = (s.garrison && (s.garrison[i] || []).length) || 0;
     const patrolShare = clamp100((s.patrol || 0) * 0.5);
@@ -4362,38 +4428,89 @@ function recalcSecurity(s, ev) {
     const baseBoost = hasBase ? MIL_BASE.presenceBonus : 0;
     // bônus regional: cidades adjacentes na mesma região recebem +5 se há base na região
     let regionBleed = 0;
-    if (s.milBases) {
-      for (const bi of Object.keys(s.milBases)) {
+    if (s.bases) {
+      for (const bi of Object.keys(s.bases)) {
         const idx = +bi; if (idx === i) continue;
         if (T_REGION[idx] === T_REGION[i] && ADJ[i] && ADJ[i].includes(idx)) regionBleed = Math.max(regionBleed, MIL_BASE.regionBleed);
       }
     }
-    const presencaAlvo = clamp100(45 + garr * 10 + (t && t.owner === "pl" ? 35 : 0) - (ownerFac ? 10 : 0) + patrolShare * 0.25 + (techF - 0.5) * 12 + (s.training || 0) * 4 + baseBoost + regionBleed);
+    const invested = c.segInvest || 0;
+    const protegido = hasBase || invested >= 15;
+    // PRESENÇA POLICIAL só cresce com ação concreta: investimento em segurança,
+    // base militar, pacificação/ocupação do território e guarnição alocada.
+    // Sem nada disso, a presença converge para um residual baixo (o estado "existe", só isso).
+    const presencaAlvo = clamp100(
+      15                                        // residual mínimo do estado
+      + invested * 0.45                         // investimento em segurança sustenta presença (até +45)
+      + baseBoost + regionBleed                 // base militar +25 · vizinhança de base +5
+      + (t && t.owner === "pl" ? 30 : 0)        // território pacificado/ocupado pela polícia
+      + garr * 8                                // guarnição alocada
+      + patrolShare * 0.15                      // patrulha distribuída (efeito menor)
+      - (ownerFac ? 12 : 0)                     // facção dona expulsa a polícia das ruas
+    );
     // converge gradualmente para o alvo (a presença não muda bruscamente)
     presenca = clamp100(Math.round(presenca + (presencaAlvo - presenca) * 0.35));
 
     // influência criminosa cresce se a cidade é de facção, decai com presença/inteligência
     let infl = c.influenciaCriminosa;
-    if (ownerFac) infl += 3 + threatIdx;                 // facção dona reforça domínio
-    if (t && t.owner === "nt") infl += 1;                // vazio do estado dá espaço ao crime
+    if (ownerFac) {
+      infl += 3 + threatIdx;                             // facção dona reforça domínio
+    } else {
+      // Zona neutra ou da polícia: SEM base nem investimento em segurança, o crime avança
+      // constantemente. Investir/instalar base freia e reverte o crescimento.
+      if (!protegido) infl += (t && t.owner === "pl") ? 3 : 4;   // território negligenciado
+      else infl -= 2 + invested * 0.05;                          // investimento sufoca o crime
+      if (t && t.owner === "pl") infl -= 3;                      // ocupação policial reduz
+    }
     if (c.desemprego > 60) infl += 2;                    // desemprego alimenta recrutamento
-    infl -= presenca * 0.05;                             // presença reduz crime
-    infl -= intelF * 4;                                  // inteligência desmantela células
-    if (t && t.owner === "pl") infl -= 3;                // cidade ocupada perde crime
+    // presença e inteligência só suprimem crime de forma plena onde há proteção ativa
+    // (base militar ou investimento em segurança) — território totalmente largado não
+    // se beneficia da capacidade policial "no papel", só da que está de fato presente ali.
+    const passiveFactor = protegido ? 1 : 0.25;
+    infl -= presenca * 0.05 * passiveFactor;              // presença reduz crime
+    infl -= intelF * 4 * passiveFactor;                   // inteligência desmantela células
     infl = clamp100(Math.round(infl));
 
-    // apoio popular: memória que reage à estabilidade e corrupção
+    // TOMADA POR CRIME: influência em 100% → uma facção assume o território.
+    if (infl >= 100 && t && (t.owner === "pl" || t.owner === "nt")) {
+      const faccao = pickDominatingFaction(s, i);
+      const prev = t.owner;
+      t.owner = faccao;
+      t.str = Math.max(6, Math.round((T_TIER[i] || 1) * 4 + 4));
+      infl = 85;                                         // consolidado (não fica travado em 100)
+      presenca = clamp100(presenca - 25);
+      c.apoioPopular = clamp100(c.apoioPopular - 10);
+      s.rep = Math.max(0, (s.rep || 0) - 6);
+      ev && ev.push({ tone:"bad", text:`☠ ${BASE_FAC[faccao].name.toUpperCase()} DOMINOU ${T_NAMES[i].toUpperCase()}! O crime tomou o território ${prev === "pl" ? "que você controlava" : "neutro"} — reforce a segurança antes que o estado caia.` });
+    }
+
+    // APOIO POPULAR: sobe com presença policial visível, crime em queda e
+    // investimentos em segurança; desaba quando o crime avança e a polícia some.
+    // (c.influenciaCriminosa ainda guarda o valor da semana passada → dá pra medir tendência)
     let apoio = c.apoioPopular;
-    const estabPrevia = c.estabilidade;
-    if (estabPrevia >= 70) apoio += 3;             // cidade segura recupera confiança
-    else if (estabPrevia >= 55) apoio += 1.5;
-    else if (estabPrevia <= 35) apoio -= 2;
+    const crimeCaiu = infl < c.influenciaCriminosa;
+    const crimeSubiu = infl > c.influenciaCriminosa + 1;
+    if (presenca >= 60) apoio += 2;                // polícia presente tranquiliza
+    else if (presenca >= 40) apoio += 0.5;
+    else apoio -= 1.5;                             // polícia ausente → medo
+    if (crimeCaiu) apoio += 2;                     // crime em queda → confiança cresce
+    else if (crimeSubiu) apoio -= 2;               // crime em alta → pânico
     if (infl < 25) apoio += 1.5;                   // crime baixo tranquiliza a população
+    if (invested >= 15) apoio += 1;                // investimento em segurança é visível na rua
     apoio -= c.corrupcaoLocal * 0.03;
     apoio = clamp100(Math.round(apoio));
 
-    // economia oscila com a estabilidade; cidades muito seguras prosperam
-    let econ = clamp100(Math.round(c.economia + (estabPrevia >= 75 ? 2 : estabPrevia >= 60 ? 1 : -1) - (c.desemprego > 50 ? 1 : 0)));
+    // ECONOMIA: cresce com presença policial, crime baixo/em queda e sem ocorrências
+    // ativas; crime alto e ocorrências abertas afugentam o comércio.
+    const occHere = (s.activeOccur || []).filter(o => o.zone === i).length;
+    let econ = c.economia;
+    if (presenca >= 55 && infl < 40) econ += 2;    // segurança visível atrai comércio
+    else if (presenca >= 40 && infl < 60) econ += 1;
+    if (infl >= 60) econ -= 2;                     // crime alto afugenta investimento
+    if (crimeCaiu) econ += 1;                      // crime em queda → recuperação
+    econ -= occHere;                               // cada ocorrência ativa trava o comércio
+    if (c.desemprego > 50) econ -= 1;
+    econ = clamp100(Math.round(econ));
     let desemp = clamp100(Math.round(c.desemprego + (econ < 40 ? 1 : -1)));
 
     // corrupção local sobe com influência criminosa, cai com presença
@@ -4587,6 +4704,7 @@ export default function App() {
   const [showIntl, setShowIntl] = useState(false);
   const [showForces, setShowForces] = useState(false);
   const [facDossier, setFacDossier] = useState(null); // ficha da facção rival aberta (id: cs/fd/cv)
+  const [dossierZone, setDossierZone] = useState(null); // dossiê de investigação aberto (índice da zona)
   const [showCommand, setShowCommand] = useState(false);
   const [showCities, setShowCities] = useState(false);
   const [showMissions, setShowMissions] = useState(false);
@@ -4608,6 +4726,7 @@ export default function App() {
   const [cinematic, setCinematic] = useState(null);
   const [hasSave, setHasSave] = useState(false);
   const [saveNote, setSaveNote] = useState("");
+  const [saveInfo, setSaveInfo] = useState(null); // { phase:"career"|"strategy", mode:"pl"|"fc"|null }
   const [achv, setAchv] = useState({});
   const [legacyRecord, setLegacyRecord] = useState(0);
   const [toasts, setToasts] = useState([]);
@@ -4630,6 +4749,7 @@ export default function App() {
           const d = JSON.parse(r.value);
           if (d.v === 41) {
             setHasSave(true);
+            setSaveInfo({ phase: d.phase === "career" ? "career" : "strategy", mode: d.g ? d.g.mode : null });
             setSaveNote(d.phase === "career"
               ? `Carreira · ${(d.cr.side === "pl" ? CORPS[d.cr.corp || 0].ranks : RANKS_FC)[d.cr.rank]} · semana ${d.cr.week}`
               : `Comando · ${d.g.mode === "pl" ? "Polícia" : d.g.fname} · semana ${d.g.turn}`);
@@ -4647,11 +4767,15 @@ export default function App() {
     })();
   }, []);
   async function persist(data) {
-    try { await window.storage.set("pe-save", JSON.stringify({ v:41, ...data })); setHasSave(true); } catch (e) {}
+    try {
+      await window.storage.set("pe-save", JSON.stringify({ v:41, ...data }));
+      setHasSave(true);
+      setSaveInfo({ phase: data.phase === "career" ? "career" : "strategy", mode: data.g ? data.g.mode : null });
+    } catch (e) {}
   }
   async function wipeSave() {
     try { await window.storage.delete("pe-save"); } catch (e) {}
-    setHasSave(false); setSaveNote("");
+    setHasSave(false); setSaveNote(""); setSaveInfo(null);
   }
   async function continueSave() {
     try {
@@ -6204,11 +6328,14 @@ export default function App() {
     }
     const sMatch = stanceMatch(aStance, dStance);
     const sMult = stanceMult(aStance, dStance, flex);
-    const playerForce = compAtk * equipMult * (1 + nadePush) * mF * sMult;
+    // Dossiê de investigação (polícia): a informação vira pontos extras de ataque
+    const dossier = isPolice && g.dossiers ? g.dossiers[zone] : null;
+    const dossierMult = dossier ? investigationMult(dossier.score) : 1;
+    const playerForce = compAtk * equipMult * (1 + nadePush) * mF * sMult * dossierMult;
     const baseDef = advOwner === "nt" ? 5 : Math.max(4, tgt.str || 4);
     const weak = (g.facWeakened && g.facWeakened[advOwner]) || 0;
     const enemyForce = baseDef * 1.3 * (1 - weak);
-    return { compAtk, equipMult, nadeObj, nadePush, mF, aStance, dStance, sMatch, sMult, flex, playerForce, baseDef, enemyForce, weak, advOwner };
+    return { compAtk, equipMult, nadeObj, nadePush, mF, aStance, dStance, sMatch, sMult, flex, playerForce, baseDef, enemyForce, weak, advOwner, dossierMult };
   }
   // Modificadores de estratégia derivados do arsenal/pacotes do jogador
   function arsenalStrategyMods() {
@@ -6325,6 +6452,13 @@ export default function App() {
         else if (tData.bonus === "defesa") cmdBonus.def = bonus;
       }
     }
+    // v78: fraqueza tática revelada pelo dossiê — atacar por ela dá +15% de força
+    if (g && g.mode === "pl" && g.dossiers && confronto.zone != null) {
+      const dz = g.dossiers[confronto.zone];
+      if (dz && dz.score >= 100 && dz.intel && dz.intel.weakness === tatica) {
+        cmdBonus.atk = (cmdBonus.atk || 0) + 0.15;
+      }
+    }
     const res = calcularConfrontoTatico(confronto.atacante, confronto.defensor, tatica, confronto.territorio, cmdBonus, confronto.arsenalMods || {});
     const narr = narrativaConfronto(confronto.atacante.id, confronto.defensor.id, res.resultado === "recuo" ? "derrota" : res.resultado, cfPoliceForce);
     setCfTatica(tatica);
@@ -6357,6 +6491,11 @@ export default function App() {
           s.morale = clamp(s.morale - (10 + Math.floor(Math.random() * 11)), 5, 100);
         } else {
           s.morale = clamp(s.morale - 4, 5, 100);
+        }
+        // v78: o dossiê é consumido no confronto — a informação virou ação
+        if (s.mode === "pl" && s.dossiers && s.dossiers[zone]) {
+          delete s.dossiers[zone];
+          s.msg = `📁 Dossiê de ${T_NAMES[zone]} consumido na operação.` + (s.msg ? " " + s.msg : "");
         }
         if (!Array.isArray(s.news)) s.news = [];
         const Z = (T_NAMES[zone] || "").toUpperCase();
@@ -6539,7 +6678,25 @@ export default function App() {
         if (isPol || s.jailBoss > 0) return;
         const others = myZones();
         if (byPolice) {
-          const escCh = s.tronoVendido ? 0.12 : (s.escape ? 0.65 : 0.3);
+          // REGRAS DA POLÍCIA:
+          // 1) Poder da investida policial > força do trono → DERRUBA (captura pesada, 8 sem).
+          // 2) Senão, só PRENDE se o procurado estiver muito alto (heat ≥ 70) → captura normal (5 sem).
+          // 3) Procurado baixo e sem poder → o chefe RESISTE ao cerco (trono se mantém).
+          // Em qualquer captura, a rota de fuga dá chance de escapar; o gravata (advogado) pode soltar depois.
+          const forcaTrono = throneForce(s);
+          const poderPolicia = policeAssaultPower(s);
+          const superior = poderPolicia > forcaTrono;
+          const procuradoAlto = (s.heat || 0) >= 70;
+          if (!superior && !procuradoAlto) {
+            // resiste: nem poder nem processo suficiente para prender o chefe.
+            // O caller já havia marcado a zona do trono como "pl" — reverte, o trono se mantém.
+            if (s.terr[s.throne]) { s.terr[s.throne].owner = "me"; s.terr[s.throne].str = 0; }
+            s.morale = Math.max(5, s.morale - 6);
+            s.heat = Math.min(120, (s.heat || 0) + 8);
+            ev.push({ tone:"good", text:`🛡 A polícia cercou o trono, mas sem força nem mandado que se sustente o chefe resistiu. O procurado subiu.` });
+            return;
+          }
+          const escCh = s.tronoVendido ? 0.12 : (s.escape ? 0.65 : 0.3) * (superior ? 0.6 : 1);
           s.tronoVendido = false;
           if (others.length && Math.random() < escCh) {
             s.throne = others[Math.floor(Math.random() * others.length)];
@@ -6547,11 +6704,19 @@ export default function App() {
             s._achv.push("trono");
             ev.push({ tone:"warn", text:`🪤 O CERCO FECHOU NO TRONO — mas o chefe escapou pela ${s.escape ? "rota de fuga" : "laje dos fundos"} rumo a ${T_NAMES[s.throne]}.` });
             setCine("retomada", "FUGA NO ÚLTIMO SEGUNDO", `O cerco fechou, mas o chefe escapou para ${T_NAMES[s.throne]}.`, 3, "boom");
+          } else if (superior) {
+            // DERRUBADA: força policial superior → captura pesada (8 semanas), gravata ainda pode brigar
+            s.jailBoss = 8; s.heat = 40; s.guards = 0;
+            s.morale = Math.max(5, s.morale - 22);
+            s.bossTrial = true;
+            ev.push({ tone:"bad", text:`👑 A POLÍCIA DERRUBOU O TRONO. Força superior, cerco fechado: o chefe pegou 8 semanas. Só um gravata de peso encurta isso.` });
+            setCine("preso", "O TRONO CAIU", "Força policial superior. O chefe caiu — oito semanas atrás das grades.", 4, "boom");
           } else {
+            // PRISÃO por procurado alto (poder não era superior): captura normal (5 semanas)
             s.jailBoss = 5; s.heat = 50; s.guards = 0;
             s.morale = Math.max(5, s.morale - 15);
             s.bossTrial = true;
-            ev.push({ tone:"bad", text:`👑 O CHEFE FOI CAPTURADO NO TRONO. Cinco semanas de cela — mas um bom advogado pode encurtar isso.` });
+            ev.push({ tone:"bad", text:`👑 O CHEFE FOI PRESO — o procurado alto pesou. Cinco semanas de cela, mas um bom advogado pode encurtar isso.` });
             setCine("preso", "VOCÊ FOI PRESO", "O chefe caiu. Cinco semanas atrás das grades.", 4, "boom");
           }
         } else {
@@ -6897,6 +7062,11 @@ export default function App() {
         const prod = Math.round(myZones().reduce((a2, z) => a2 + tierProd[T_TIER[z]], 0) * capMult);
         s.product += prod;
 
+        // ARRECADAÇÃO POR TERRITÓRIO: cada zona dominada paga um valor semanal em caixa.
+        // Perder a zona = perder essa renda. (mesmo valor exibido no dossiê de investigação)
+        const arrecadacao = Math.round(myZones().reduce((a2, z) => a2 + zoneRevenue(z), 0) * capMult);
+        s.cash += arrecadacao;
+
         // V4.3: Manutenção de tropas (economia v2)
         const maintenanceCost = calculateMaintenanceCosts(s);
         s.cash -= maintenanceCost;
@@ -6909,7 +7079,7 @@ export default function App() {
         if (s.assets.a2) s.morale = Math.min(100, s.morale + 1);
         if (s.assets.a3) s.morale = Math.min(100, s.morale + 1);
         const govNote = gt.id === "corrupto" || gt.id === "permissivo" ? ` · ${gt.icon} ${gt.label} blinda o movimento` : gt.id === "aliado" || gt.id === "favoravel" ? ` · ${gt.icon} ${gt.label} aperta o cerco` : "";
-        ev.push({ tone:"info", text:`▤ Movimento: +${prod} un.${hasCapital ? " 👑(+25% capital)" : ""} (estoque ${s.product}) · Manutenção: −${brMoney(maintenanceCost)}. Preço: ${brMoney(s.price)}/un.${govNote}` });
+        ev.push({ tone:"info", text:`▤ Arrecadação dos territórios: +${brMoney(arrecadacao)} (${myZones().length} zona${myZones().length !== 1 ? "s" : ""}${hasCapital ? " · 👑+25% capital" : ""}) · Movimento: +${prod} un. (estoque ${s.product}) · Manutenção: −${brMoney(maintenanceCost)}. Preço: ${brMoney(s.price)}/un.${govNote}` });
         if (s.cash < 0) {
           s.cash = 0; takeLosses(s, 5);
           s.morale = Math.max(5, s.morale - 6);
@@ -7522,7 +7692,7 @@ export default function App() {
             // soma ao dossiê existente (acumula); pequena variação para sensação de realismo
             const finalScore = Math.round(inv.score * rnd(0.9, 1.1));
             const prev = (s.dossiers[z] && s.dossiers[z].score) || 0;
-            s.dossiers[z] = { score: Math.min(220, prev + finalScore), completedTurn: s.turn };
+            s.dossiers[z] = { score: Math.min(220, prev + finalScore), completedTurn: s.turn, intel: buildDossierIntel(s, Number(z)) };
             const rank = investigationRank(s.dossiers[z].score);
             ev.push({ tone:"good", text:`🔍 INVESTIGAÇÃO CONCLUÍDA em ${T_NAMES[z]}: dossiê ${rank.label} (+${finalScore} pts). +${Math.round((investigationMult(s.dossiers[z].score) - 1) * 100)}% de força em operações nesta cidade.` });
             delete s.investigations[z];
@@ -7716,24 +7886,24 @@ export default function App() {
 
           {/* ====== ZONAS CLICÁVEIS (em cima de cada botão da arte) ====== */}
 
-          {/* JOGAR (botão dourado, dentro do card MODO CARREIRA) */}
+          {/* JOGAR (botão dourado, dentro do card MODO CARREIRA) → SEMPRE leva à carreira */}
           <Zona left={57.5} top={47.5} width={36} height={8.5}
-            onClick={() => { Audio.play && Audio.play("click"); hasSave ? continueSave() : setScreen("cside"); }}
+            onClick={() => { Audio.play && Audio.play("click"); (saveInfo && saveInfo.phase === "career") ? continueSave() : setScreen("cside"); }}
             label="Jogar" glow={GOLD} />
 
           {/* MODO CARREIRA (lado esquerdo do card — coroa + título + descrição) */}
           <Zona left={2.5} top={45.5} width={54} height={14}
-            onClick={() => { Audio.play && Audio.play("click"); setScreen("cside"); }}
+            onClick={() => { Audio.play && Audio.play("click"); (saveInfo && saveInfo.phase === "career") ? continueSave() : setScreen("cside"); }}
             label="Modo Carreira" glow={GOLD} />
 
-          {/* POLÍCIA (card azul, esquerda) */}
+          {/* POLÍCIA (card azul, esquerda) → continua save livre de polícia ou começa novo */}
           <Zona left={3} top={62} width={45} height={17.5}
-            onClick={() => { Audio.play && Audio.play("click"); quickStart("pl"); }}
+            onClick={() => { Audio.play && Audio.play("click"); (saveInfo && saveInfo.phase === "strategy" && saveInfo.mode === "pl") ? continueSave() : quickStart("pl"); }}
             label="Polícia — Modo Livre" glow={POL} />
 
-          {/* FACÇÃO (card vermelho, direita) */}
+          {/* FACÇÃO (card vermelho, direita) → continua save livre de facção ou começa novo */}
           <Zona left={49} top={62} width={48} height={17.5}
-            onClick={() => { Audio.play && Audio.play("click"); quickStart("fc"); }}
+            onClick={() => { Audio.play && Audio.play("click"); (saveInfo && saveInfo.phase === "strategy" && saveInfo.mode === "fc") ? continueSave() : quickStart("fc"); }}
             label="Facção — Modo Livre" glow={CRI} />
 
           {/* CONQUISTAS (barra larga) */}
@@ -8763,8 +8933,8 @@ export default function App() {
               <div style={{ fontFamily:"'Arial Black', Arial, sans-serif", fontSize:15, fontWeight:900, color: cashV < 60 ? "#ff5555" : "#28ff28", textShadow: cashV < 60 ? "0 0 8px #ff222266" : "0 0 10px #00cc0088", lineHeight:1 }}>{brMoney(cashV)}</div>
               <div className="font-mono" style={{ fontSize:7, color:C.mut, letterSpacing:"0.1em", marginTop:2 }}>CAIXA</div>
             </div>
-            <Stat label="PRESSÃO" value={`${g.heat}`} color={heatColor} />
-            <Stat label="RESPEITO" value={`${g.morale}%`} color={g.morale < 35 ? C.bad : C.text} />
+            <Stat label="PROCURADO" value={`${g.heat}`} color={heatColor} />
+            <Stat label="REPUTAÇÃO" value={`${g.popularity ?? 50}%`} color={(g.popularity ?? 50) < 35 ? C.bad : C.text} />
             <Stat label="SOLDADOS" value={units} />
             <Stat label="ZONAS" value={`${owned.length}/${NZ}`} color={FAC(ME).color} />
           </div>
@@ -9091,6 +9261,11 @@ export default function App() {
                   <div className="font-mono mt-1" style={{ fontSize:11, color:C.warn }}>
                     {"$".repeat(T_TIER[sel])} Riqueza da zona: {tierProd[T_TIER[sel]]} un./semana{T_TIER[sel] === 3 ? " — conquista atrai forte atenção policial" : ""}
                   </div>
+                  {!isPolice && (
+                    <div className="font-mono mt-0.5" style={{ fontSize:11, color: g.terr[sel].owner === ME ? C.good : C.mut }}>
+                      💰 Arrecadação: {brMoney(zoneRevenue(sel))}/semana {g.terr[sel].owner === ME ? "— entra na sua caixa" : "— vai pra facção que dominar"}
+                    </div>
+                  )}
                   {isPolice && g.security && g.civic && g.civic[sel] && (() => {
                     const cc = g.civic[sel];
                     const st = CITY_STATUS[cc.statusCidade] || CITY_STATUS.EM_RECUPERACAO;
@@ -9113,6 +9288,16 @@ export default function App() {
                         {bar("Influ. crime", cc.influenciaCriminosa, C.bad)}
                         {bar("Apoio pop.", cc.apoioPopular, C.warn)}
                         {bar("Economia", cc.economia, "#5BA0C0")}
+                        {(() => {
+                          const protegida = (g.bases && g.bases[sel]) || (cc.segInvest || 0) >= 15;
+                          const owner = g.terr[sel].owner;
+                          if (owner !== "pl" && owner !== "nt") return null;
+                          return protegida ? (
+                            <div className="font-mono mt-1" style={{ fontSize:8.5, color:C.good }}>🛡 Protegida — investimento/base seguram o crime</div>
+                          ) : (
+                            <div className="font-mono mt-1" style={{ fontSize:8.5, color:C.bad }}>⚠ NEGLIGENCIADA — sem investimento, o crime avança toda semana{cc.influenciaCriminosa >= 70 ? " · RISCO DE DOMÍNIO DE FACÇÃO" : ""}</div>
+                          );
+                        })()}
                         {cc.celulasDormentes > 0 && (
                           <div className="font-mono mt-1" style={{ fontSize:8.5, color:C.bad }}>⚠ {cc.celulasDormentes} célula{cc.celulasDormentes > 1 ? "s" : ""} dormente{cc.celulasDormentes > 1 ? "s" : ""} — use inteligência</div>
                         )}
@@ -9132,10 +9317,13 @@ export default function App() {
                           const rk = investigationRank(dossier.score);
                           const pct = Math.round((investigationMult(dossier.score) - 1) * 100);
                           return (
-                            <div className="mt-2 rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${rk.cor}66` }}>
-                              <div className="font-mono font-bold" style={{ fontSize:10, color:rk.cor, letterSpacing:"0.05em" }}>📁 DOSSIÊ: {rk.label}</div>
+                            <button onClick={() => { Audio.play("tap"); setDossierZone(sel); }} className="pe-btn mt-2 rounded-lg p-2 w-full text-left" style={{ background:C.panel2, border:`1px solid ${rk.cor}66` }}>
+                              <div className="flex items-center justify-between">
+                                <span className="font-mono font-bold" style={{ fontSize:10, color:rk.cor, letterSpacing:"0.05em" }}>📁 DOSSIÊ: {rk.label}</span>
+                                <span className="font-mono" style={{ fontSize:9, color:rk.cor }}>ABRIR ▸</span>
+                              </div>
                               <div className="font-mono mt-0.5" style={{ fontSize:9, color:C.mut }}>Score {dossier.score} · próxima operação aqui: <b style={{ color:rk.cor }}>+{pct}% de força</b></div>
-                            </div>
+                            </button>
                           );
                         })()}
                         {/* investigação em andamento */}
@@ -10812,14 +11000,35 @@ export default function App() {
 
               {!isPolice && inTropa && (
                 <Card>
-                  <div className="font-mono font-bold" style={{ fontSize:11, letterSpacing:"0.1em" }}>👑 PROTEÇÃO DO TRONO</div>
+                  <div className="font-mono font-bold" style={{ fontSize:11, letterSpacing:"0.1em" }}>👑 FORTIFICAR TRONO</div>
                   <div className="font-mono mt-1" style={{ fontSize:11, color:C.mut }}>
-                    O chefe está em <b style={{ color:C.text }}>{g.jailBoss > 0 ? "🔒 NA CADEIA" : T_NAMES[g.throne]}</b>. Se o trono cair pra polícia: 5 semanas preso. Se cair pra rivais: xeque-mate.
+                    O chefe está em <b style={{ color:C.text }}>{g.jailBoss > 0 ? "🔒 NA CADEIA" : T_NAMES[g.throne]}</b>. Rivais só atacam o trono se fizerem <b style={{ color:C.text }}>divisa</b> com ele — e só derrubam se tiverem mais força. A polícia só <b style={{ color:C.text }}>derruba</b> se a investida superar a força do trono; senão só <b style={{ color:C.text }}>prende</b> (com procurado alto) — e o gravata pode soltar.
                   </div>
+                  {/* Placar de força do trono vs investida policial */}
+                  {(() => {
+                    const ft = throneForce(g);
+                    const pp = policeAssaultPower(g);
+                    const seguro = ft >= pp;
+                    return (
+                      <div className="rounded-lg p-2 mt-2 mb-2" style={{ background:C.panel2, border:`1px solid ${seguro ? C.good : C.bad}55` }}>
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono" style={{ fontSize:10, color:C.mut }}>👑 Força do trono</span>
+                          <span className="font-mono font-bold" style={{ fontSize:13, color:seguro ? C.good : C.text }}>{ft}</span>
+                        </div>
+                        <div className="flex items-center justify-between mt-0.5">
+                          <span className="font-mono" style={{ fontSize:10, color:C.mut }}>🚨 Investida policial (procurado {g.heat || 0})</span>
+                          <span className="font-mono font-bold" style={{ fontSize:13, color:seguro ? C.text : C.bad }}>{pp}</span>
+                        </div>
+                        <div className="font-mono mt-1" style={{ fontSize:9, color: seguro ? C.good : C.bad }}>
+                          {seguro ? "🛡 Trono mais forte — a polícia não consegue derrubar, no máximo prender." : "⚠ Investida supera o trono — risco de DERRUBADA. Fortifique ou baixe o procurado."}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <div className="flex justify-between items-center mt-2 mb-2">
                     <div>
                       <div className="font-mono text-xs">Seguranças particulares: {g.guards}</div>
-                      <div className="font-mono" style={{ fontSize:10, color:C.mut }}>+5 guardas · upkeep R$ 3 mil/cada/sem</div>
+                      <div className="font-mono" style={{ fontSize:10, color:C.mut }}>+5 guardas (+10 força) · upkeep R$ 3 mil/cada/sem</div>
                     </div>
                     <Btn onClick={hireGuards} disabled={g.cash < 80}>R$ 130 mil</Btn>
                   </div>
@@ -11215,6 +11424,96 @@ export default function App() {
           );
         })()}
 
+        {/* === SALA DE INVESTIGAÇÃO (dossiê da zona, modo polícia) === */}
+        {dossierZone != null && g.dossiers && g.dossiers[dossierZone] && (() => {
+          const zi = dossierZone;
+          const dos = g.dossiers[zi];
+          const intel = dos.intel || buildDossierIntel(g, zi);
+          const rk = investigationRank(dos.score);
+          const pct = Math.round((investigationMult(dos.score) - 1) * 100);
+          const fac = RIVAL_AI[intel.owner] || BASE_FAC[intel.owner] || BASE_FAC.nt;
+          const facColor = fac.color || "#8A93A6";
+          // qualidade da informação por nível do dossiê
+          const nivel = dos.score >= 100 ? 2 : dos.score >= 50 ? 1 : 0; // 0=vago 1=aprox 2=exato
+          const fuzz = (v) => nivel === 2 ? String(v) : nivel === 1 ? "~" + (Math.round(v / 5) * 5) : `${Math.max(1, Math.round(v * 0.6))}–${Math.round(v * 1.5)}`;
+          const linha = (rot, val, cor) => (
+            <div className="flex items-center justify-between py-1.5" style={{ borderBottom:"1px dashed #2a3242" }}>
+              <span className="font-mono" style={{ fontSize:9, color:C.mut, letterSpacing:"0.08em" }}>{rot}</span>
+              <span className="font-mono font-bold" style={{ fontSize:11, color: cor || C.text, textAlign:"right" }}>{val}</span>
+            </div>
+          );
+          const redacted = <span style={{ background:"#2a3242", color:"#2a3242", borderRadius:2, padding:"0 22px", userSelect:"none" }}>██</span>;
+          return (
+            <div onClick={() => setDossierZone(null)}
+              style={{ position:"fixed", inset:0, zIndex:95, background:"rgba(2,3,6,0.93)", display:"flex", alignItems:"center", justifyContent:"center", padding:12 }}>
+              <div onClick={e => e.stopPropagation()}
+                style={{ width:"100%", maxWidth:420, maxHeight:"92vh", overflowY:"auto", background:"#0d1016",
+                  border:"2px solid #3a4a63", borderRadius:6, boxShadow:"0 0 40px #00000088",
+                  backgroundImage:"repeating-linear-gradient(0deg, transparent, transparent 26px, #ffffff05 27px)" }}>
+                {/* Cabeçalho estilo delegacia */}
+                <div style={{ padding:"12px 16px", borderBottom:"2px solid #3a4a63", background:"#111722" }}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-mono font-bold" style={{ fontSize:13, color:"#9fb6d9", letterSpacing:"0.14em" }}>🕵 SALA DE INVESTIGAÇÃO</div>
+                      <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.1em" }}>POLÍCIA DE PORTO ESPERANÇA · INTELIGÊNCIA</div>
+                    </div>
+                    <button onClick={() => setDossierZone(null)} className="font-mono" style={{ fontSize:18, color:C.mut, background:"none", border:"none", cursor:"pointer", lineHeight:1 }}>✕</button>
+                  </div>
+                </div>
+                <div style={{ padding:16 }}>
+                  {/* Carimbo do nível + alvo */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.1em" }}>ALVO DA INVESTIGAÇÃO</div>
+                      <div className="font-mono font-bold" style={{ fontSize:15, color:"#fff" }}>{T_NAMES[zi]}</div>
+                      <div className="font-mono" style={{ fontSize:10, color:facColor }}>{fac.icon || "▪"} {fac.name}</div>
+                    </div>
+                    <div className="font-mono font-bold" style={{ fontSize:10, color:rk.cor, border:`2px solid ${rk.cor}`, borderRadius:4, padding:"4px 8px", transform:"rotate(6deg)", letterSpacing:"0.08em", boxShadow:`0 0 12px ${rk.cor}33` }}>
+                      {rk.label}
+                    </div>
+                  </div>
+                  {/* "Polaroid" do gerente da área */}
+                  <div className="flex gap-3 mb-3">
+                    <div style={{ background:"#e8e4d8", borderRadius:3, padding:"6px 6px 14px", transform:"rotate(-3deg)", flexShrink:0, boxShadow:"2px 3px 8px #00000066" }}>
+                      <div className="flex items-center justify-center" style={{ width:64, height:64, background:"#232a38", fontSize:34 }}>{intel.owner === "nt" ? "❓" : "🕵🏽"}</div>
+                      <div className="font-mono text-center" style={{ fontSize:6.5, color:"#333", marginTop:4 }}>GERENTE DA ÁREA</div>
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.1em" }}>GERENTE IDENTIFICADO</div>
+                      <div className="font-mono font-bold" style={{ fontSize:12, color: nivel >= 1 ? "#e8d9a0" : C.mut, lineHeight:1.3, marginTop:2 }}>
+                        {nivel >= 1 ? intel.gerente : "não identificado — aprofunde a investigação"}
+                      </div>
+                      <div className="font-mono mt-1" style={{ fontSize:8.5, color:C.mut }}>Fonte: {dos.score >= 100 ? "escutas + infiltrado" : dos.score >= 50 ? "informantes de rua" : "observação externa"}</div>
+                    </div>
+                  </div>
+                  {/* Dados levantados */}
+                  <div className="rounded p-2.5 mb-3" style={{ background:"#101623", border:"1px solid #26314a" }}>
+                    {linha("EFETIVO NA ÁREA", fuzz(intel.soldados) + " soldados", "#e0e6f0")}
+                    {linha("FORÇA TOTAL", fuzz(intel.forca) + " (efetiva " + fuzz(intel.forcaEfetiva) + ")", "#ff9a8a")}
+                    {linha("MOVIMENTAÇÃO SEMANAL", nivel >= 1 ? brMoney(intel.movimenta) + "/sem" : redacted, "#7ad08a")}
+                    {linha("COMBATE FAVORÁVEL", nivel >= 2 ? TACTIC_LABEL[intel.weakness] : redacted, nivel >= 2 ? "#D9B25F" : undefined)}
+                  </div>
+                  {nivel >= 2 ? (
+                    <div className="font-mono rounded p-2 mb-3" style={{ fontSize:9.5, color:"#D9B25F", background:"#D9B25F11", border:"1px solid #D9B25F44", lineHeight:1.5 }}>
+                      🎯 FRAQUEZA CONFIRMADA: atacar com <b>{TACTIC_LABEL[intel.weakness]}</b> dá <b>+15% de força</b> além do bônus do dossiê.
+                    </div>
+                  ) : (
+                    <div className="font-mono rounded p-2 mb-3" style={{ fontSize:9.5, color:C.mut, background:"#ffffff08", border:"1px dashed #2a3242", lineHeight:1.5 }}>
+                      🔒 Fraqueza tática não confirmada. Abra nova investigação para acumular score ≥ 100 e revelar o combate favorável.
+                    </div>
+                  )}
+                  {/* Rodapé: valor operacional */}
+                  <div className="flex items-center justify-between rounded p-2.5" style={{ background:"#14202f", border:"1px solid #3a5a7a" }}>
+                    <span className="font-mono" style={{ fontSize:9, color:"#9fb6d9" }}>PRÓXIMA OPERAÇÃO NESTA CIDADE</span>
+                    <span className="font-mono font-bold" style={{ fontSize:14, color:"#5FBF7A" }}>+{pct}% força</span>
+                  </div>
+                  <div className="font-mono mt-2 text-center" style={{ fontSize:8, color:C.mut }}>o dossiê é consumido quando a operação acontece</div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {!g.over && (
           <div className="fixed bottom-0 left-0 right-0 p-3 flex items-center gap-3" style={{ background:C.bg, borderTop:`1px solid ${C.line}` }}>
             <div className="font-mono flex-1" style={{ fontSize:10, color:C.mut }}>
@@ -11306,12 +11605,20 @@ export default function App() {
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      {[["frontal","⚡ Ataque Frontal","potencializado pelo armamento ofensivo"],["emboscada","🌙 Emboscada","potencializada pelos pacotes táticos"],["reforco","🛡️ Reforço Defensivo","coletes/viaturas reduzem suas baixas"],["recuo","🏃 Recuo Estratégico","viaturas garantem recuo limpo"]].map(([k, lab, desc]) => (
-                        <button key={k} onClick={() => escolherTatica(k)} className="pe-btn rounded-lg" style={{ padding:"8px 8px", background:"#141a26", border:`1px solid ${C.line}`, textAlign:"left" }}>
-                          <div className="font-mono font-bold" style={{ fontSize:11, color:"#fff" }}>{lab}</div>
-                          <div className="font-mono" style={{ fontSize:8.5, color:C.mut, marginTop:2 }}>{desc}</div>
-                        </button>
-                      ))}
+                      {(() => {
+                        // v78: fraqueza revelada pelo dossiê (polícia, score ≥ 100) marca a tática favorável
+                        const dz = isPolice && g.dossiers && confronto.zone != null ? g.dossiers[confronto.zone] : null;
+                        const weakTat = dz && dz.score >= 100 && dz.intel ? dz.intel.weakness : null;
+                        return [["frontal","⚡ Ataque Frontal","potencializado pelo armamento ofensivo"],["emboscada","🌙 Emboscada","potencializada pelos pacotes táticos"],["reforco","🛡️ Reforço Defensivo","coletes/viaturas reduzem suas baixas"],["recuo","🏃 Recuo Estratégico","viaturas garantem recuo limpo"]].map(([k, lab, desc]) => {
+                          const isWeak = weakTat === k;
+                          return (
+                            <button key={k} onClick={() => escolherTatica(k)} className="pe-btn rounded-lg" style={{ padding:"8px 8px", background: isWeak ? "#2a2410" : "#141a26", border:`1px solid ${isWeak ? "#D9B25F" : C.line}`, textAlign:"left", boxShadow: isWeak ? "0 0 10px #D9B25F44" : "none" }}>
+                              <div className="font-mono font-bold" style={{ fontSize:11, color: isWeak ? "#D9B25F" : "#fff" }}>{lab}</div>
+                              <div className="font-mono" style={{ fontSize:8.5, color: isWeak ? "#D9B25F" : C.mut, marginTop:2 }}>{isWeak ? "🎯 FRAQUEZA REVELADA · +15% de força" : desc}</div>
+                            </button>
+                          );
+                        });
+                      })()}
                     </div>
                     <button onClick={() => setConfronto(null)} className="font-mono w-full" style={{ marginTop:10, fontSize:10, color:C.mut, background:"none", border:"none", cursor:"pointer" }}>cancelar</button>
                   </div>
