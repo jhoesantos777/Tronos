@@ -206,13 +206,20 @@ const investigationRank = score => {
   return { label:"SEM DADOS", cor:"#7a6a48" };
 };
 // ---- Inteligência do dossiê (v78): o que a investigação revela sobre a zona ----
-// Gerentes de área: nome fictício estável por zona (não muda entre aberturas do dossiê)
-const AREA_MANAGERS = [
-  "Waldir “Marreta” Nunes", "Célio “Sombra” Prado", "Tonho “Fumaça” Reis",
-  "Ivo “Cebola” Martins", "Dandinho da Baixada", "Rui “Tigrão” Salles",
-  "Percival “Doutor” Gomes", "Neno “Pistola” Farias", "Zico do Alemão",
-  "Careca de Ouro", "Betão “Sussurro” Lima", "Gugu “Trator” Mendes",
-];
+// GERENTES DAS FACÇÕES: cada facção rival tem 4 gerentes fixos e os nomes NUNCA se repetem
+// entre facções. Cada zona é atribuída (deterministicamente) a um dos 4 gerentes da facção
+// dona — um gerente pode comandar uma ou mais áreas.
+const FACTION_MANAGERS = {
+  cs: ["Waldir “Marreta” Nunes", "Tonho “Fumaça” Reis", "Zico do Alemão", "Neno “Pistola” Farias"],
+  fd: ["Percival “Doutor” Gomes", "Gugu “Trator” Mendes", "Careca de Ouro", "Rui “Tigrão” Salles"],
+  cv: ["Célio “Sombra” Prado", "Ivo “Cebola” Martins", "Betão “Sussurro” Lima", "Dandinho da Baixada"],
+};
+// Gerente responsável por uma zona, conforme a facção dona. Determinístico por zona.
+function zoneManager(faction, zi) {
+  const roster = FACTION_MANAGERS[faction];
+  if (!roster) return null;
+  return roster[((zi * 7 + 3) % 4 + 4) % 4];
+}
 const TACTIC_LABEL = { frontal:"⚡ Ataque Frontal", emboscada:"🌙 Emboscada" };
 // Monta a ficha de inteligência da zona: efetivo, força, movimentação semanal,
 // gerente da área e a fraqueza tática (que dá bônus se o jogador atacar por ela).
@@ -229,7 +236,7 @@ function buildDossierIntel(s, zi) {
     forca: str,
     forcaEfetiva: Math.round(str * 1.3),
     movimenta: zoneRevenue(zi),   // mesma arrecadação semanal que o território gera para o dono
-    gerente: isNt ? "células locais sem comando fixo" : AREA_MANAGERS[(zi * 7 + 3) % AREA_MANAGERS.length],
+    gerente: isNt ? "células locais sem comando fixo" : (zoneManager(owner, zi) || "gerente desconhecido"),
     weakness: ((zi + tier) % 2 === 0) ? "frontal" : "emboscada",
   };
 }
@@ -4182,6 +4189,35 @@ const rivalPower = (s, fId) => {
   const str = zones.reduce((a, z) => a + z.str, 0);
   return { count: zones.length, str, wealth: s.rivalState[fId].wealth };
 };
+// ============ INFORMANTES (modo polícia): inteligência real sobre facções ============
+// Quanto mais o jogador paga, mais fundo o informante entra — cada nível revela mais.
+const INFORMANT_TIERS = [
+  { cost: 40,  label:"Contato de rua",      reveal:"territórios dominados" },
+  { cost: 90,  label:"Infiltrado",          reveal:"finanças + nº de membros" },
+  { cost:170,  label:"Homem de dentro",     reveal:"chefe + gerentes das áreas" },
+  { cost:300,  label:"Toupeira na cúpula",  reveal:"próximos alvos e tomadas" },
+];
+// Coleta de dados 100% reais do estado do jogo sobre uma facção.
+function factionIntel(s, f) {
+  const zonesIdx = s.terr.map((t, i) => (t.owner === f ? i : -1)).filter(i => i >= 0);
+  const str = zonesIdx.reduce((a, z) => a + (s.terr[z].str || 0), 0);
+  const rs = (s.rivalState && s.rivalState[f]) || {};
+  const revenue = zonesIdx.reduce((a, z) => a + zoneRevenue(z), 0);
+  const membros = Math.round(str * 3 + zonesIdx.length * 4);
+  // fronteira / próximas tomadas: zonas adjacentes que não são da facção, ponderadas
+  const alvoW = {};
+  for (const z of zonesIdx) for (const a of (ADJ[z] || [])) {
+    const ow = s.terr[a].owner;
+    if (ow === f) continue;
+    let w = 1 + (T_TIER[a] || 1);
+    if (ow === "me" || ow === "pl") w += 1;
+    if (a === s.throne) w += 3;
+    alvoW[a] = Math.max(alvoW[a] || 0, w);
+  }
+  const alvos = Object.keys(alvoW).map(Number).sort((a, b) => alvoW[b] - alvoW[a]).slice(0, 3);
+  const gerentes = zonesIdx.slice(0, 5).map(z => ({ zona: z, nome: zoneManager(f, z) || "—" }));
+  return { zonesIdx, str, membros, wealth: Math.round(rs.wealth || 0), revenue, alvos, gerentes };
+}
 // Poder militar total do jogador — usado para comparar com a força de uma facção rival.
 // Uma facção rival só toma território/derruba o trono se a força dela superar este valor.
 const playerPower = (s) => {
@@ -4291,6 +4327,7 @@ function initStrategy(opts) {
     rivalTemp:{ cs:0.5, fd:0.5, cv:0.7 }, rivalMoves:{},
     rivalHate:{ cs:0, fd:0, cv:0 },
     events:{}, rivalState:{ cs:mkRivalState('cs'), fd:mkRivalState('fd'), cv:mkRivalState('cv') },
+    informants:{ cs:0, fd:0, cv:0 }, // nível do informante contratado por facção (modo polícia)
     vendetta:{},
     gov: 0, govAlliance: 0, lastElection: 0,
     politics: { unlocked: false, party: null, influence: 0, held: [], rivalHeld: [] },
@@ -4596,6 +4633,7 @@ function migrateStrategy(g) {
   if (!g.events || typeof g.events !== "object") g.events = {};
   if (!g.vendetta || typeof g.vendetta !== "object") g.vendetta = {};
   if (!g.rivalHate || typeof g.rivalHate !== "object") g.rivalHate = { cs:0, fd:0, cv:0 };
+  if (!g.informants || typeof g.informants !== "object") g.informants = { cs:0, fd:0, cv:0 };
   if (!Array.isArray(g._achv)) g._achv = [];
   if (g.fundDetail === undefined) g.fundDetail = null;
   if (!g.forces || typeof g.forces !== "object") g.forces = {};
@@ -4704,6 +4742,7 @@ export default function App() {
   const [showIntl, setShowIntl] = useState(false);
   const [showForces, setShowForces] = useState(false);
   const [facDossier, setFacDossier] = useState(null); // ficha da facção rival aberta (id: cs/fd/cv)
+  const [informantFac, setInformantFac] = useState(null); // ficha de informante (polícia) aberta (id: cs/fd/cv)
   const [dossierZone, setDossierZone] = useState(null); // dossiê de investigação aberto (índice da zona)
   const [showCommand, setShowCommand] = useState(false);
   const [showCities, setShowCities] = useState(false);
@@ -5804,6 +5843,18 @@ export default function App() {
       return fn(s) || s;
     });
     if (cost > 0) Audio.play("money");
+  }
+  // Contrata / aprofunda o informante de uma facção (modo polícia). Cada nível revela mais.
+  function hireInformant(f) {
+    const lvl = (g.informants && g.informants[f]) || 0;
+    if (lvl >= INFORMANT_TIERS.length) return;
+    const tier = INFORMANT_TIERS[lvl];
+    spend(tier.cost, s => {
+      s.informants = s.informants || { cs:0, fd:0, cv:0 };
+      s.informants[f] = lvl + 1;
+      s.msg = `🕵 Informante ${tier.label} recrutado no ${BASE_FAC[f].name}. Novas informações liberadas.`;
+      return s;
+    });
   }
   const recruitUnit = k => {
     if (g.mode === "pl") {
@@ -9230,6 +9281,12 @@ export default function App() {
                       <div className="font-mono mt-1" style={{ fontSize:11, color:FAC(g.terr[sel].owner).color }}>
                         ▣ {FAC(g.terr[sel].owner).name}{isAllied(g.terr[sel].owner) ? " · PACTO ATIVO" : ""}
                       </div>
+                      {/* Gerente da área (modo facção): visível ao clicar numa zona de facção rival */}
+                      {!isPolice && FACTION_MANAGERS[g.terr[sel].owner] && (
+                        <div className="font-mono mt-0.5" style={{ fontSize:10, color:C.mut }}>
+                          👤 Gerente: <span style={{ color:C.text }}>{zoneManager(g.terr[sel].owner, sel)}</span>
+                        </div>
+                      )}
                     </div>
                     <button onClick={() => setSel(null)} className="font-mono text-xs px-2" style={{ color:C.mut }}>✕</button>
                   </div>
@@ -9825,6 +9882,31 @@ export default function App() {
                     <div className="font-mono" style={{ fontSize:9, color:C.mut }}>RECURSOS</div>
                     <div className="font-mono mt-1" style={{ fontSize:10, color:C.text }}>🧠 Inteligência: <b>{g.intelligence}</b></div>
                     <div className="font-mono" style={{ fontSize:10, color:C.text }}>🔬 Tecnologia: <b>{g.technology}</b></div>
+                  </div>
+                </div>
+
+                {/* INTELIGÊNCIA — FACÇÕES (cards clicáveis + informante) */}
+                <div className="rounded-lg p-3" style={{ background:C.panel, border:`1px solid ${C.line}` }}>
+                  <div className="font-mono font-bold mb-2" style={{ fontSize:10, color:"#5BA0C0", letterSpacing:"0.08em" }}>🕵 INTELIGÊNCIA — FACÇÕES</div>
+                  <div className="flex flex-col gap-2">
+                    {["cs","fd","cv"].map(f => {
+                      const ri = RIVAL_AI[f] || {};
+                      const lvl = (g.informants && g.informants[f]) || 0;
+                      const zonas = g.terr.filter(t => t.owner === f).length;
+                      return (
+                        <button key={f} onClick={() => { Audio.play("tap"); setInformantFac(f); }}
+                          className="pe-btn rounded-lg p-2 text-left flex items-center gap-2" style={{ background:C.panel2, border:`1px solid ${ri.color}55` }}>
+                          <span style={{ fontSize:20 }}>{ri.icon}</span>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div className="font-mono font-bold" style={{ fontSize:11, color:ri.color }}>{ri.name}</div>
+                            <div className="font-mono" style={{ fontSize:8.5, color:C.mut }}>
+                              {lvl > 0 ? `${zonas} zona${zonas!==1?"s":""} · informante nível ${lvl}/${INFORMANT_TIERS.length}` : "sem informante — dados ocultos"}
+                            </div>
+                          </div>
+                          <span className="font-mono" style={{ fontSize:9, color:"#5BA0C0" }}>{lvl > 0 ? "ver dossiê ▸" : "🔒 investigar ▸"}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -11418,6 +11500,99 @@ export default function App() {
                   </div>
                   <div className="font-mono" style={{ fontSize:11, color:C.text, lineHeight:1.5 }}>{dos.lore}</div>
                   {ri.desc && <div className="font-mono mt-2" style={{ fontSize:9.5, color:C.mut, fontStyle:"italic" }}>{ri.desc}</div>}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* === DOSSIÊ DE INFORMANTE (modo polícia): inteligência real gated por pagamento === */}
+        {informantFac && (() => {
+          const f = informantFac;
+          const ri = RIVAL_AI[f] || {};
+          const dos = FACTION_DOSSIER[f] || {};
+          const col = ri.color || "#5BA0C0";
+          const lvl = (g.informants && g.informants[f]) || 0;
+          const intel = factionIntel(g, f);
+          const nextTier = lvl < INFORMANT_TIERS.length ? INFORMANT_TIERS[lvl] : null;
+          const canPay = nextTier && (g.budget || 0) >= nextTier.cost;
+          const locked = (need) => (
+            <div className="rounded-lg p-2 flex items-center gap-2" style={{ background:"#0d1119", border:`1px dashed ${C.line}` }}>
+              <span style={{ fontSize:13 }}>🔒</span>
+              <span className="font-mono" style={{ fontSize:9, color:C.mut }}>{need}</span>
+            </div>
+          );
+          const zonaNomes = intel.zonesIdx.map(z => T_NAMES[z]).join(", ") || "nenhuma";
+          return (
+            <div onClick={() => setInformantFac(null)}
+              style={{ position:"fixed", inset:0, zIndex:96, background:"rgba(2,3,6,0.92)", display:"flex", alignItems:"center", justifyContent:"center", padding:12 }}>
+              <div onClick={e => e.stopPropagation()}
+                style={{ width:"100%", maxWidth:420, maxHeight:"92vh", overflowY:"auto", background:"#0b0e15", border:`2px solid ${col}`, borderRadius:14, boxShadow:`0 0 30px ${col}55` }}>
+                {/* cabeçalho */}
+                <div className="flex items-center gap-3" style={{ padding:"14px 16px 10px", borderBottom:`1px solid ${C.line}` }}>
+                  <div style={{ position:"relative", width:48, height:48, flexShrink:0 }}>
+                    <div className="flex items-center justify-center" style={{ position:"absolute", inset:0, borderRadius:10, background:col + "22", fontSize:26 }}>{ri.icon}</div>
+                    <img src={dos.symbol} alt="" onError={e => { e.target.style.display = "none"; }}
+                      style={{ position:"relative", width:48, height:48, objectFit:"contain", borderRadius:10 }} />
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div className="font-mono font-bold" style={{ fontSize:13, color:col }}>{ri.name}</div>
+                    <div className="font-mono" style={{ fontSize:9, color:C.mut }}>🕵 Informante nível {lvl}/{INFORMANT_TIERS.length}</div>
+                  </div>
+                  <button onClick={() => setInformantFac(null)} className="font-mono" style={{ fontSize:18, color:C.mut, background:"none", border:"none", cursor:"pointer" }}>✕</button>
+                </div>
+                <div style={{ padding:14, display:"flex", flexDirection:"column", gap:8 }}>
+                  {/* Nível 1: territórios */}
+                  {lvl >= 1 ? (
+                    <div className="rounded-lg p-2" style={{ background:"#0d1119", border:`1px solid ${col}33` }}>
+                      <div className="font-mono font-bold" style={{ fontSize:9, color:col, letterSpacing:"0.06em" }}>🗺 TERRITÓRIOS DOMINADOS ({intel.zonesIdx.length})</div>
+                      <div className="font-mono" style={{ fontSize:9.5, color:C.text, marginTop:3, lineHeight:1.4 }}>{zonaNomes}</div>
+                    </div>
+                  ) : locked("Contrate um contato de rua para mapear os territórios.")}
+                  {/* Nível 2: finanças + membros */}
+                  {lvl >= 2 ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-lg p-2" style={{ background:"#0d1119", border:`1px solid ${col}33` }}>
+                        <div className="font-mono" style={{ fontSize:8.5, color:C.mut }}>💰 CAIXA / SEMANA</div>
+                        <div className="font-mono font-bold" style={{ fontSize:12, color:"#5FBF7A" }}>{brMoney(intel.revenue)}</div>
+                      </div>
+                      <div className="rounded-lg p-2" style={{ background:"#0d1119", border:`1px solid ${col}33` }}>
+                        <div className="font-mono" style={{ fontSize:8.5, color:C.mut }}>👥 MEMBROS (est.)</div>
+                        <div className="font-mono font-bold" style={{ fontSize:12, color:C.text }}>{intel.membros}</div>
+                      </div>
+                    </div>
+                  ) : locked("Um infiltrado revela finanças e o número de membros.")}
+                  {/* Nível 3: chefe + gerentes */}
+                  {lvl >= 3 ? (
+                    <div className="rounded-lg p-2" style={{ background:"#0d1119", border:`1px solid ${col}33` }}>
+                      <div className="font-mono font-bold" style={{ fontSize:9, color:col, letterSpacing:"0.06em" }}>👑 CHEFE & GERENTES</div>
+                      <div className="font-mono" style={{ fontSize:10, color:C.text, marginTop:3 }}>Chefe: <b style={{ color:col }}>{dos.boss}</b></div>
+                      {intel.gerentes.map((gm, i) => (
+                        <div key={i} className="font-mono" style={{ fontSize:9, color:C.mut }}>• {gm.nome} <span style={{ color:"#5a6478" }}>({T_NAMES[gm.zona]})</span></div>
+                      ))}
+                    </div>
+                  ) : locked("Um homem de dentro entrega o chefe e os gerentes das áreas.")}
+                  {/* Nível 4: próximos alvos */}
+                  {lvl >= 4 ? (
+                    <div className="rounded-lg p-2" style={{ background:"#160d10", border:`1px solid #C82C2C55` }}>
+                      <div className="font-mono font-bold" style={{ fontSize:9, color:"#ff8a7a", letterSpacing:"0.06em" }}>🎯 PRÓXIMOS ALVOS / TOMADAS</div>
+                      {intel.alvos.length ? intel.alvos.map((z, i) => (
+                        <div key={i} className="font-mono" style={{ fontSize:9.5, color:C.text }}>▸ {T_NAMES[z]} <span style={{ color:C.mut }}>({g.terr[z].owner === "me" || g.terr[z].owner === "pl" ? "sua zona!" : g.terr[z].owner === "nt" ? "neutra" : "de rival"})</span></div>
+                      )) : <div className="font-mono" style={{ fontSize:9, color:C.mut }}>Sem fronteiras ativas no momento.</div>}
+                    </div>
+                  ) : locked("Uma toupeira na cúpula antecipa os próximos ataques.")}
+                  {/* botão contratar / aprofundar */}
+                  {nextTier ? (
+                    <button onClick={() => hireInformant(f)} disabled={!canPay}
+                      className="pe-btn w-full rounded-lg py-2.5 font-mono font-bold" style={{ marginTop:4, fontSize:11,
+                        background: canPay ? "#123048" : C.panel2, color: canPay ? "#5BD0F0" : C.mut,
+                        border:`1px solid ${canPay ? "#5BA0C0" : C.line}`, opacity: canPay ? 1 : 0.6 }}>
+                      🕵 {lvl === 0 ? "CONTRATAR INFORMANTE" : "PAGAR MAIS — APROFUNDAR"} · {nextTier.label} — {brMoney(nextTier.cost)}
+                      <div className="font-mono" style={{ fontSize:8, color:C.mut, fontWeight:400, marginTop:2 }}>revela: {nextTier.reveal}</div>
+                    </button>
+                  ) : (
+                    <div className="font-mono text-center" style={{ marginTop:4, fontSize:9.5, color:"#5FBF7A" }}>✔ Rede de informação completa nesta facção.</div>
+                  )}
                 </div>
               </div>
             </div>
