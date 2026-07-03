@@ -823,8 +823,31 @@ const AI_ALL = ["cs", "fd", "cv"];
 // Personagens
 const CH = { boss: "Salomão", mgr: "Russo", rivF: "Neguinho", par: "Ferraz", sup: "Sgt. Brito", rivP: "Vidal" };
 
-const RANKS_FC = ["Olheiro", "Vendedor", "Soldado do Morro", "Gerente", "Braço-Direito", "Dono"];
+// ============ CARREIRA v2: "Do Recado ao Trono" ============
+// Escada nova da facção. Os 5 thresholds antigos continuam valendo (mesmo nº de degraus).
+// Rank 5 (Gerente) abre o mapa tutelado; rank 6 (Chefe) é a ascensão ao modo livre.
+const RANKS_FC = ["Menino de Recados", "Mula", "Olheiro", "Contenção", "Segurança do Chefe", "Gerente", "Chefe"];
 const THRESH = [45, 110, 190, 290, 420];
+// Elenco dinâmico por facção-mãe: o CHEFE vem de FACTION_DOSSIER e o MENTOR (gerente que
+// te criou) é o 1º de FACTION_MANAGERS. "Salomão"/"Russo" nos textos legados são trocados
+// em runtime por castText — o modo polícia (Ferraz/Vidal/Brito) não é afetado.
+// (FACTION_DOSSIER/FACTION_MANAGERS são definidos mais abaixo; só são lidos em runtime.)
+function careerCast(mother) {
+  const dos = (typeof FACTION_DOSSIER !== "undefined" && FACTION_DOSSIER[mother]) || null;
+  const rost = (typeof FACTION_MANAGERS !== "undefined" && FACTION_MANAGERS[mother]) || null;
+  return {
+    boss: dos ? dos.boss : CH.boss,
+    mgr: rost ? rost[0] : CH.mgr,
+    cupula: rost || [],
+  };
+}
+function castText(str, mother) {
+  if (!str || !mother) return str;
+  const cast = careerCast(mother);
+  return String(str)
+    .replaceAll("{BOSS}", cast.boss).replaceAll("{MGR}", cast.mgr)
+    .replaceAll("Salomão", cast.boss).replaceAll("Russo", cast.mgr);
+}
 // Corporações policiais — desbloqueadas em sequência
 const CORPS = [
   { id:"pm", name:"Polícia Militar", ranks:["Soldado","Cabo","Sargento","Tenente"], color:"#3D7BD9" },
@@ -2029,7 +2052,7 @@ const ACHV = [
 
 // ============ MISSÕES ============
 const MISSIONS = [
-  { id:"fc1", side:"fc", rank:[0,1], title:"Campana na Viela", risk:"baixo", pay:"R$ 24–41 mil",
+  { id:"fc1", side:"fc", rank:[1,2], title:"Campana na Viela", risk:"baixo", pay:"R$ 24–41 mil",
     desc:`${CH.mgr}, o gerente, precisa de olhos na entrada da viela hoje.`,
     steps:[
       { t:"Você chega cedo. De onde vai vigiar?",
@@ -2050,6 +2073,80 @@ const MISSIONS = [
             w:{ t:"Você cruzou na frente deles assobiando. Recado entregue na cara do perigo. Respeito.", m:10, x:16, L:4 },
             f:{ t:"Te pararam pra pedir informação. Coração a mil, ponto queimado por hoje.", x:2, q:8 } },
         ]},
+    ]},
+  { id:"fc0", side:"fc", rank:[0,0], title:"O Primeiro Recado", risk:"baixo", pay:"R$ 16–32 mil",
+    desc:"{MGR} te chamou pelo nome pela primeira vez. Um recado, uma chance. Não estraga.",
+    steps:[
+      { t:"{MGR} fala baixo, uma vez só: 'Fala pro Careca que o domingo tá de pé, mas o preço mudou.' Como você guarda?",
+        c:[
+          { l:"Decorar palavra por palavra", p:.8,
+            w:{ t:"Você repetiu na cabeça o caminho inteiro. Chegou lá, saiu perfeito. O Careca assentiu devagar.", m:10, x:9 },
+            f:{ t:"'Domingo mudou... o preço tá de pé?' O Careca franziu a testa. Recado torto, bronca na volta.", x:2, q:3 } },
+          { l:"Anotar num papelzinho escondido", p:.65,
+            w:{ t:"Papel na meia, recado entregue, papel engolido... quer dizer, rasgado. Missão cumprida.", m:10, x:7 },
+            f:{ t:"Um dos meninos do Careca viu o papel. 'Recado escrito? Tá de brincadeira.' Vacilo anotado.", x:2, q:5, L:-3 } },
+        ]},
+      { t:"Na volta, dois moleques de outra quebrada fecham a viela: 'Recado de quem, neguinho?'",
+        c:[
+          { l:"'Recado de ninguém. Tô indo pra casa da minha vó.'", p:.75,
+            w:{ t:"Cara de paisagem, passo tranquilo. Eles riram e abriram caminho. {MGR} soube — e gostou.", m:8, x:10 },
+            f:{ t:"A voz falhou no 'vó'. Levou um safanão, mas não abriu o bico. Chegou inteiro e calado.", h:-8, x:6, L:2 } },
+          { l:"Dar meia-volta e correr pela laje", p:.6, tag:"agil",
+            w:{ t:"Subiu a escadaria como gato. Quando olharam, você já era silhueta no morro.", m:6, x:12 },
+            f:{ t:"Escorregou na laje molhada. Joelho ralado, orgulho também — mas o recado morreu com você.", h:-12, x:4 } },
+        ]},
+    ]},
+  // === MECÂNICA ROTA + TIMER (Recados) ===
+  { id:"fc_rota", side:"fc", rank:[0,1], title:"Recado Quente", risk:"médio", pay:"R$ 24–52 mil",
+    desc:"{MGR} precisa que um aviso chegue AGORA a outra boca — a polícia tá subindo o morro.",
+    steps:[
+      { t:"A polícia entrou pela portaria. Por onde você corre com o recado?",
+        c:[
+          { l:"Pelo beco estreito (rápido, arriscado)", p:1, w:{ t:"Você voa pelo beco apertado. Ganha tempo, mas o caminho é cego.", x:6, next:1 } },
+          { l:"Pela laje, pulando telhado (precisa agilidade)", p:1, tag:"agil", w:{ t:"De cima você enxerga tudo e escolhe a melhor descida.", x:8, next:2 } },
+        ]},
+      { type:"timer", time:6, onTimeout:1,
+        t:"Fim do beco: uma viatura parada, dois PMs de costas. Decide RÁPIDO — eles vão virar:",
+        c:[
+          { l:"Fingir que mexe no celular e passar reto", p:.75, w:{ t:"Cara de quem não deve nada. Passou colado e sumiu na esquina.", m:30, x:12 }, f:{ t:"Um PM te olhou torto e mandou parar. Soltou, mas o recado atrasou.", x:4, q:8 } },
+          { l:"Voltar e achar outro caminho", p:.9, w:{ t:"Melhor perder um minuto que perder a liberdade. Deu certo.", m:20, x:8 }, f:{ t:"O outro caminho também tava fechado. O recado quase não chega.", x:3, q:4 } },
+        ]},
+      { t:"Da laje você vê o recado chegar bem na hora. Como desce?",
+        c:[
+          { l:"Escada dos fundos, tranquilo", p:.85, w:{ t:"Desceu como quem sai de casa. Ninguém viu. {MGR} ficou impressionado.", m:45, x:16, L:4 }, f:{ t:"Escorregou no último degrau. Recado ok, tornozelo não.", m:25, x:8, h:-8 } },
+        ]},
+    ]},
+  // === MECÂNICA PUSH-YOUR-LUCK (Mula) ===
+  { id:"fc_luck", side:"fc", rank:[1,2], title:"A Carga da Semana", risk:"médio", pay:"por viagem",
+    desc:"{MGR} liberou a carga do dia. Cada viagem paga — mas cada viagem é uma chance de cair.",
+    steps:[
+      { type:"luck", tag:"agil",
+        t:"A boca tá abastecida. Quantas viagens você arrisca hoje? Quanto mais você roda, mais leva — e mais a polícia fica de olho.",
+        trip:{ m:14, x:3, risk0:.1, riskInc:.13, bust:{ t:"Blitz na esquina. Você largou a mochila no bueiro e correu — perdeu a carga do dia e ficou marcado.", q:16, h:-6 } },
+        stopText:"Você encerrou no lucro. Bolso cheio, ficha limpa. {MGR} respeita quem sabe a hora de parar." },
+    ]},
+  // === MECÂNICA MEMÓRIA (Olheiro) ===
+  { id:"fc_mem", side:"fc", rank:[2,3], title:"Olhos da Madrugada", risk:"baixo", pay:"R$ 32–65 mil",
+    desc:"Você é o olheiro da madrugada. Decore o que passa — um erro e a boca cai.",
+    steps:[
+      { type:"memory",
+        t:"Três carros passaram devagar demais na viela. Grave as placas:",
+        mem:{ show:4.5, showItems:["KPT-4571","BRA-2E19","OQL-8834"], question:"Qual placa passou DUAS vezes? (a viatura disfarçada)", options:["KPT-4571","BRA-2E19","OQL-8834","Nenhuma delas"], answerIdx:1 },
+        w:{ t:"Você cravou: a BRA-2E19 rodou a viela duas vezes. Aviso dado, boca fechada a tempo. Frieza de profissional.", m:50, x:18, L:4 },
+        f:{ t:"Você trocou as placas na cabeça. A viatura voltou e pegou o movimento aberto. Prejuízo pra todo mundo.", x:5, q:12 } },
+    ]},
+  // === MECÂNICA QTE DE TIMING (Contenção) ===
+  { id:"fc_qte", side:"fc", rank:[3,4], title:"A Noite da Invasão", risk:"alto", pay:"R$ 65–130 mil",
+    desc:"Rivais tão subindo pra tomar a boca. Você é a contenção. Reaja na hora exata — ou o morro cai.",
+    steps:[
+      { type:"qte", tag:"arma", t:"Eles vêm subindo a viela na escuridão. Você arma a contenção. TOQUE no momento exato do bote:",
+        qte:{ window:[0.40,0.62], period:1300,
+          w:{ t:"Timing perfeito: você surgiu na hora exata e segurou a linha. Recuaram sem tomar nada.", m:70, x:20, L:6 },
+          f:{ t:"Você reagiu tarde. Eles avançaram dois pontos antes de você organizar a resposta.", m:20, x:6, h:-12, q:10 } } },
+      { type:"qte", t:"Eles voltam com tudo. Última onda — reaja no tempo certo:",
+        qte:{ window:[0.42,0.60], period:1100,
+          w:{ t:"Segundo bote na mosca. A quebrada viu — e vai lembrar de quem segurou o morro.", m:60, x:16, L:8 },
+          f:{ t:"Dessa vez você errou o tempo. Deu pra segurar, mas com baixas.", m:30, x:6, h:-15 } } },
     ]},
   { id:"fc2", side:"fc", rank:[0,1], title:"Entrega Rápida", risk:"baixo", pay:"R$ 32–49 mil",
     desc:"Um pacote precisa atravessar três bairros antes do anoitecer.",
@@ -2117,7 +2214,7 @@ const MISSIONS = [
             f:{ t:"Disfarçado. Você passou a noite na delegacia até o advogado chegar.", arrest:true, x:-10, q:12, h:-10 } },
         ]},
     ]},
-  { id:"fc4", side:"fc", rank:[1,2], title:"Cobrança no Fiado", risk:"médio", pay:"R$ 41–97 mil",
+  { id:"fc4", side:"fc", rank:[2,3], title:"Cobrança no Fiado", risk:"médio", pay:"R$ 41–97 mil",
     desc:"Um comerciante deve três semanas ao movimento.",
     steps:[
       { t:"Você chega na loja dele. Como aborda?",
@@ -2161,7 +2258,7 @@ const MISSIONS = [
             f:{ t:`"Resolvam isso entre vocês", cortou ${CH.mgr}. A rixa só cresceu.`, x:4, R:1 } },
         ]},
     ]},
-  { id:"fc5", side:"fc", rank:[2,3], title:"Contenção na Fronteira", risk:"alto", pay:"R$ 65–113 mil",
+  { id:"fc5", side:"fc", rank:[3,4], title:"Contenção na Fronteira", risk:"alto", pay:"R$ 65–113 mil",
     desc:"Rivais estão testando a divisa da quebrada. Segurar a linha.",
     steps:[
       { t:"Como posiciona a contenção?",
@@ -2169,7 +2266,7 @@ const MISSIONS = [
           { l:"Posições fixas, esperar eles virem", p:.75, tag:"vest",
             w:{ t:"Eles testaram, encontraram muralha, recuaram. Zero baixas.", m:45, x:16 },
             f:{ t:"Pressionaram mais do que o esperado. Recuo organizado, mas recuo.", x:6, h:-15, q:6 } },
-          { l:"Emboscada no ponto cego deles", p:.6, tag:"gear",
+          { l:"Emboscada no ponto cego deles", p:.6, tag:"arma",
             w:{ t:"Eles entraram direto na armadilha. Vão pensar duas vezes antes de voltar.", m:60, x:22, q:8 },
             f:{ t:"Alguém pisou em lata no momento errado. Confronto confuso, todos recuaram.", h:-20, x:8, q:10 } },
         ]},
@@ -2183,7 +2280,7 @@ const MISSIONS = [
             f:{ t:`${CH.mgr} nem quis saber. 'Pra que me trouxe esse problema?'`, L:-2, x:3 } },
         ]},
     ]},
-  { id:"fc6", side:"fc", rank:[2,3], title:"Recuperar a Carga", risk:"alto", pay:"R$ 81–146 mil",
+  { id:"fc6", side:"fc", rank:[3,4], title:"Recuperar a Carga", risk:"alto", pay:"R$ 81–146 mil",
     desc:"Uma quadrilha avulsa roubou um carregamento do movimento. Inadmissível.",
     steps:[
       { t:"Vocês acham o depósito deles. Como entra?",
@@ -2191,7 +2288,7 @@ const MISSIONS = [
           { l:"De madrugada, em silêncio", p:.7, tag:"agil",
             w:{ t:"Entraram dormindo, saíram com tudo. Ninguém nem acordou.", m:70, x:18 },
             f:{ t:"Cachorro latiu, luz acendeu. Pegaram metade e vazaram.", m:30, x:8, h:-10 } },
-          { l:"Chegar chegando, na moral do susto", p:.6, tag:"gear",
+          { l:"Chegar chegando, na moral do susto", p:.6, tag:"arma",
             w:{ t:"Eles devolveram tudo e ainda pediram desculpa. História pra contar.", m:85, x:24, q:10 },
             f:{ t:"Eles reagiram. Recuperaram a carga, mas saiu caro.", m:50, x:10, h:-25, q:12 } },
         ]},
@@ -2205,8 +2302,8 @@ const MISSIONS = [
             f:{ t:`${CH.mgr} percebeu páginas marcadas. O olhar dele disse tudo.`, L:-12 } },
         ]},
     ]},
-  { id:"fc7", side:"fc", rank:[3,4], title:"Semana do Gerente", risk:"médio", pay:"R$ 97–162 mil",
-    desc:"A quebrada é sua pra administrar esta semana.",
+  { id:"fc7", side:"fc", rank:[4,4], title:"A Sombra do Chefe", risk:"médio", pay:"R$ 97–162 mil",
+    desc:"{BOSS} confiou a quebrada a você esta semana. Cada decisão sua fala em nome dele.",
     steps:[
       { t:"Dois soldados brigaram feio na frente de todo mundo.",
         c:[
@@ -2606,7 +2703,7 @@ MISSIONS.push(
         ]},
     ]},
   // FACÇÃO — guerra de território
-  { id:"fc_esquinas", side:"fc", rank:[2,3], title:"Guerra de Esquinas", risk:"alto", pay:"R$ 57–97 mil",
+  { id:"fc_esquinas", side:"fc", rank:[3,4], title:"Guerra de Esquinas", risk:"alto", pay:"R$ 57–97 mil",
     desc:"Uma quebrada vizinha avançou em dois pontos de venda seus. Não pode ficar assim.",
     steps:[
       { t:"A resposta define seu nome na área.",
@@ -3065,7 +3162,7 @@ MISSIONS.push(
             f:{ t:"Sem o efetivo estrangeiro, metade escapou pelo mar. Cooperação existe por um motivo.", x:8 } },
         ]},
     ]},
-  { id:"fc11", side:"fc", rank:[0,1], title:"Segurança do Baile", risk:"baixo", pay:"R$ 29–52 mil",
+  { id:"fc11", side:"fc", rank:[3,4], title:"Segurança do Baile", risk:"baixo", pay:"R$ 29–52 mil",
     desc:`O baile da quebrada é sagrado. ${CH.mgr} te escalou pra garantir que continue assim.`,
     steps:[
       { t:"Portaria do baile. Chega um grupo de fora, ninguém conhece.",
@@ -3087,7 +3184,7 @@ MISSIONS.push(
             f:{ t:`O empurrão virou rolo, o rolo virou correria. Baile encerrado mais cedo. Bronca do ${CH.mgr}.`, x:2, L:-3, h:-8 } },
         ]},
     ]},
-  { id:"fc12", side:"fc", rank:[2,3], title:"Disciplina na Quebrada", risk:"médio", pay:"R$ 65–113 mil",
+  { id:"fc12", side:"fc", rank:[3,4], title:"Disciplina na Quebrada", risk:"médio", pay:"R$ 65–113 mil",
     desc:"Um soldado do movimento está assaltando moradores — quebrando a lei número um da quebrada.",
     steps:[
       { t:"As denúncias batem: é o Marquinho, cria daqui mesmo. Como agir?",
@@ -3244,7 +3341,7 @@ MISSIONS.push(
             f:{ t:"O 'depois' vazou e os políticos blindaram tudo. A metade que importava escapou.", x:12, c:1 } },
         ]},
     ]},
-  { id:"fc13", side:"fc", rank:[1,2], title:"Guerra de Bailes", risk:"médio", pay:"R$ 49–97 mil",
+  { id:"fc13", side:"fc", rank:[2,3], title:"Guerra de Bailes", risk:"médio", pay:"R$ 49–97 mil",
     desc:"O baile rival está esvaziando o seu. Em quebrada, música também é território.",
     steps:[
       { t:"Como vencer a disputa?",
@@ -3266,7 +3363,7 @@ MISSIONS.push(
             f:{ t:"Ele saiu prometendo. E quem promete em voz alta costuma cumprir.", x:6, q:8 } },
         ]},
     ]},
-  { id:"fc14", side:"fc", rank:[2,3], title:"O Resgate", risk:"alto", pay:"R$ 81–146 mil",
+  { id:"fc14", side:"fc", rank:[3,4], title:"O Resgate", risk:"alto", pay:"R$ 81–146 mil",
     desc:"Um irmão de caminhada foi preso numa blitz com carga. O advogado diz: 'difícil'. A quebrada diz: 'impossível não existe'.",
     steps:[
       { t:"Como tirar ele de lá?",
@@ -4174,9 +4271,22 @@ function policeForceMaintenanceCost(s) {
   const a = s.army || { b:0, a:0, d:0, e:0 };
   return UKEYS.reduce((tot, k) => tot + (a[k] || 0) * (FACTION_UNIT_MAINTENANCE[k] || 0), 0);
 }
-function mkManager() {
-  const name = ADVISOR_NAMES[Math.floor(Math.random() * ADVISOR_NAMES.length)];
-  return { id: "mgr_fac", type: "gerente", name, payLevel: 0, maxPayLevel: 5, bonus: 0 };
+// Gerentes de vendas do JOGADOR (facção): até 5, cada um gere 1+ zonas e vende a mercadoria.
+// Nomes próprios (não se repetem entre si nem com os gerentes das facções rivais).
+const MAX_MANAGERS = 5;
+const PLAYER_MANAGER_NAMES = [
+  "Toninho Braço", "Márcio Fininho", "Jorge da Vila", "Bill Metralha",
+  "Paulão Cabral", "Deco Navalha", "Serginho Alvo", "Lucas Frentista",
+  "Wesley Cifrão", "Adão Relâmpago",
+];
+// Rendimento do gerente sobre a arrecadação de cada zona que ele gere: 15% (nível 0) → 100% (nível 5)
+const managerYieldPct = payLevel => 0.15 + (payLevel || 0) * 0.17;
+function mkManager(existing) {
+  const used = new Set((existing || []).map(m => m && m.name));
+  const pool = PLAYER_MANAGER_NAMES.filter(n => !used.has(n));
+  const src = pool.length ? pool : PLAYER_MANAGER_NAMES;
+  const name = src[Math.floor(Math.random() * src.length)];
+  return { id: "mgr_" + Date.now() + "_" + Math.floor(Math.random() * 9999), type: "gerente", name, payLevel: 0, maxPayLevel: 5, zones: [] };
 }
 function mkLawyer() {
   const name = ADVISOR_NAMES[Math.floor(Math.random() * ADVISOR_NAMES.length)];
@@ -4311,6 +4421,23 @@ function initStrategy(opts) {
     terr = terr.map(t => t.owner === opts.herdarOf ? { owner:"me", str:0, sup: t.sup ?? 50 } : t);
     terr[11] = { owner:"nt", str:6, sup:50 };
   }
+  // CARREIRA v2 — fase GERENTE (tutela): o jogador recebe UMA zona da facção-mãe e
+  // começa fraco, sob proteção da aliança. A mãe segue viva no mapa (não sai de aiFacs).
+  let careerGov = null;
+  if (mode === "fc" && opts.careerGov) {
+    const mother = opts.careerGov.mother;
+    // desfazer o seed padrão de Campina Nova (a gerência não começa lá)
+    const o0 = CITY_DATA[27].owner0;
+    terr[27] = { owner:o0, str: o0 === "nt" ? 4 + T_TIER[27]*2 : o0 === "pl" ? 0 : 6 + T_TIER[27]*2, sup:50 };
+    // escolher zona da mãe (tier 1, com ≥1 vizinho da mãe como buffer) p/ transferir ao jogador
+    const motherZones = terr.map((t, i) => (t.owner === mother ? i : -1)).filter(i => i >= 0);
+    let startZone = motherZones.find(i => T_TIER[i] === 1 && ADJ[i].some(j => terr[j].owner === mother));
+    if (startZone == null) startZone = motherZones.find(i => ADJ[i].some(j => terr[j].owner === mother));
+    if (startZone == null) startZone = motherZones[0];
+    if (startZone == null) startZone = 27;
+    terr[startZone] = { owner:"me", str:5, sup:55 };
+    careerGov = { mother, targetZones: opts.careerGov.targetZones || 4, startZone, loyal: opts.careerGov.loyal ?? 50, pname: opts.careerGov.pname || "Cria" };
+  }
   const alliances = { cs:0, fd:0, cv:0 };
   if (opts.ally) alliances[opts.ally] = 1;
   if (opts.hostile) alliances[opts.hostile] = -1;
@@ -4347,6 +4474,8 @@ function initStrategy(opts) {
     bribes: {},           // subornos ativos: { vereador: true, prefeito: true, ... }
     mediaSponsors: {},    // veículos de mídia corrompidos: { outletId: { paidBy:"cs", weeks:4 } }
     headlines: [],        // manchetes da semana (compartilhado polícia/facção)
+    careerGov: careerGov, // tutela da carreira v2 (fase Gerente); null no modo livre
+    careerAscend: false,  // sinaliza que o jogador atingiu a meta e pode virar Chefe
   };
   if (mode === "pl") return { ...base,
     budget: opts.budget ?? 300, rep: opts.rep ?? 50, officers:0, patrol:24,
@@ -4390,7 +4519,7 @@ function initStrategy(opts) {
     loyalGen: opts.loyalGen || null, tronoVendido:false,
     alliances, soldTo:{ cs:false, fd:false, cv:false },
     // ----- V4.2: Pessoal da facção -----
-    managers: null, // gerente (aumenta renda)
+    managers: [], // gerentes de vendas (até 5, cada um gere 1+ zonas)
     lawyers: [], // gravatas (advogados, reduzem procurado)
   };
 }
@@ -4399,16 +4528,23 @@ function initCareer(side, mother, pname) {
     side, mother: mother || null, pname: pname || "Cria",
     corp:0, rank:0, merit:0, cash:40, hp:100, heat:5, loyal:50, corr:0, rep:50, week:1,
     riv:0, ally:0, jail:0, invest:null, advInv:false, pendingArrest:false, pendingProcess:false, lawyerPick:null, transfer:null,
-    gear:{ vest:false, gear:false, agil:false },
+    gear:{ vest:false, gear:false, agil:false, arma:false },
     assets:{ car:false, house:false },
     biz:{ b1:false, b2:false, b3:false },
     people: side === "fc"
-      ? [mkPerson("russo", NPC_BASE.russo), mkPerson("neguinho", NPC_BASE.neguinho)]
+      ? [mkPerson("russo", { ...NPC_BASE.russo, name: careerCast(mother).mgr }), mkPerson("neguinho", NPC_BASE.neguinho)]
       : [mkPerson("ferraz", NPC_BASE.ferraz), mkPerson("vidal", NPC_BASE.vidal), mkPerson("brito", NPC_BASE.brito)],
     britoShield: true, fzWarned: 0, fzDone: false, fzSaved: false,
     offers:[], weekDone:false, scene:null, event:null, cityNews:null,
     promo:null, final:false, ending:null, log:null, chron:[], _achv:[],
   };
+}
+// Migra saves de carreira antigos para a Carreira v2 (sem bump da versão de save).
+function migrateCareer(cr) {
+  if (!cr) return cr;
+  if (!cr.gear) cr.gear = { vest:false, gear:false, agil:false, arma:false };
+  if (cr.gear.arma == null) cr.gear.arma = cr.side === "fc" && cr.rank >= 3; // Contenção+ já tem o ferro
+  return cr;
 }
 function rollOffers(cr) {
   if (cr.final || cr.jail > 0) return [];
@@ -4634,6 +4770,13 @@ function migrateStrategy(g) {
   if (!g.vendetta || typeof g.vendetta !== "object") g.vendetta = {};
   if (!g.rivalHate || typeof g.rivalHate !== "object") g.rivalHate = { cs:0, fd:0, cv:0 };
   if (!g.informants || typeof g.informants !== "object") g.informants = { cs:0, fd:0, cv:0 };
+  if (g.careerGov === undefined) g.careerGov = null;
+  if (g.careerAscend === undefined) g.careerAscend = false;
+  // gerentes: migrar do modelo antigo (objeto único) para array
+  if (!Array.isArray(g.managers)) {
+    g.managers = (g.managers && g.managers.payLevel != null) ? [{ ...g.managers, zones: [] }] : [];
+  }
+  for (const m of g.managers) { if (!Array.isArray(m.zones)) m.zones = []; }
   if (!Array.isArray(g._achv)) g._achv = [];
   if (g.fundDetail === undefined) g.fundDetail = null;
   if (!g.forces || typeof g.forces !== "object") g.forces = {};
@@ -4743,6 +4886,10 @@ export default function App() {
   const [showForces, setShowForces] = useState(false);
   const [facDossier, setFacDossier] = useState(null); // ficha da facção rival aberta (id: cs/fd/cv)
   const [informantFac, setInformantFac] = useState(null); // ficha de informante (polícia) aberta (id: cs/fd/cv)
+  const [betrayZone, setBetrayZone] = useState(null); // zona da facção-mãe que o jogador tenta atacar (tutela)
+  const [mechTimer, setMechTimer] = useState(null);   // segundos restantes em mecânicas com tempo (timer/memória)
+  const [memPhase, setMemPhase] = useState("memorize"); // fase da mecânica de memória: memorize|recall
+  const qteRef = useRef({ t0: 0 });                    // início da oscilação da barra de QTE
   const [dossierZone, setDossierZone] = useState(null); // dossiê de investigação aberto (índice da zona)
   const [showCommand, setShowCommand] = useState(false);
   const [showCities, setShowCities] = useState(false);
@@ -4822,7 +4969,7 @@ export default function App() {
       if (!r || !r.value) return;
       const d = JSON.parse(r.value);
       if (d.v !== 41) return;
-      if (d.phase === "career") { setCr(d.cr); setScreen("career"); setTab("serv"); }
+      if (d.phase === "career") { setCr(migrateCareer(d.cr)); setScreen("career"); setTab("serv"); }
       else { setG(migrateStrategy(d.g)); setScreen("game"); setTab("mapa"); }
     } catch (e) {}
   }
@@ -4923,26 +5070,35 @@ export default function App() {
       return c;
     });
   }
+  // Aplica um resultado (w/f ou desfecho de mecânica) ao acumulador da cena.
+  // Suporta `next` (rota/grafo) e `end`. Usado por chooseOption e pelas mecânicas especiais.
+  function applyOutcome(c, out, ok) {
+    const sc = c.scene;
+    const mission = MISSIONS.find(m => m.id === sc.mid);
+    for (const k of ["m","x","h","q","L","c","R","A","rp"]) sc.acc[k] += out[k] || 0;
+    if (out.arrest) sc.acc.arrest = true;
+    sc.out = { text: out.t, ok, next: out.next != null ? out.next : null };
+    sc.phase = "outcome";
+    const hasNext = out.next != null && out.next < mission.steps.length;
+    if (out.end || (!hasNext && (sc.single || sc.step >= mission.steps.length - 1))) sc.ended = true;
+    return c;
+  }
   function chooseOption(opt) {
     updateCr(c => {
-      const sc = c.scene;
-      const mission = MISSIONS.find(m => m.id === sc.mid);
       const p = opt.p + (opt.tag && c.gear[opt.tag] ? 0.13 : 0);
       const ok = Math.random() < p;
-      const out = ok ? opt.w : opt.f;
-      for (const k of ["m","x","h","q","L","c","R","A","rp"]) sc.acc[k] += out[k] || 0;
-      if (out.arrest) sc.acc.arrest = true;
-      sc.out = { text: out.t, ok };
-      sc.phase = "outcome";
-      if (out.end || sc.single || sc.step >= mission.steps.length - 1) sc.ended = true;
-      return c;
+      return applyOutcome(c, ok ? opt.w : opt.f, ok);
     });
+  }
+  // Desfecho vindo de uma mecânica especial (luck/memory/qte/timer)
+  function resolveMech(out, ok) {
+    updateCr(c => applyOutcome(c, out, ok));
   }
   function continueScene() {
     updateCr(c => {
       const sc = c.scene;
       const mis = MISSIONS.find(m => m.id === sc.mid);
-      if (!sc.ended) { sc.step += 1; sc.phase = "prompt"; sc.out = null; return c; }
+      if (!sc.ended) { sc.step = (sc.out && sc.out.next != null) ? sc.out.next : sc.step + 1; sc.phase = "prompt"; sc.out = null; return c; }
       if (sc.phase === "outcome") { sc.phase = "summary"; return c; }
       const a = sc.acc;
       c.cash = Math.max(0, c.cash + a.m);
@@ -4986,6 +5142,77 @@ export default function App() {
       return c;
     });
   }
+  // MECÂNICA PUSH-YOUR-LUCK (Mula): fazer mais uma viagem ou encerrar no lucro.
+  function luckTrip(go) {
+    updateCr(c => {
+      const sc = c.scene; const mission = MISSIONS.find(m => m.id === sc.mid);
+      const step = mission.steps[sc.step]; const trip = step.trip || {};
+      const trips = sc.trips || 0;
+      if (!go) return applyOutcome(c, { t: step.stopText || `Você parou no lucro depois de ${trips} viagem${trips !== 1 ? "s" : ""}. Quem sabe a hora de sair envelhece no corre.` }, true);
+      const gearCut = step.tag && c.gear[step.tag] ? 0.05 : 0;
+      const risk = Math.min(0.92, (trip.risk0 || 0.08) + trips * (trip.riskInc || 0.14) - gearCut);
+      if (Math.random() < risk) return applyOutcome(c, trip.bust || { t:"A polícia fechou o cerco. Perdeu tudo do dia.", q:12 }, false);
+      sc.trips = trips + 1;
+      sc.acc.m += trip.m || 0;
+      sc.acc.x += trip.x || 0;
+      return c;
+    });
+    Audio.play(go ? "tap" : "money");
+  }
+  // MECÂNICA MEMÓRIA (Olheiro): acertou a resposta memorizada?
+  function memoryRecall(idx) {
+    const sc = cr.scene; if (!sc) return;
+    const mission = MISSIONS.find(m => m.id === sc.mid);
+    const step = mission.steps[sc.step];
+    const ok = step.mem && idx === step.mem.answerIdx;
+    setMechTimer(null);
+    resolveMech(ok ? step.w : step.f, ok);
+  }
+  // Reset de estado efêmero ao entrar num novo step de mecânica.
+  useEffect(() => {
+    setMemPhase("memorize");
+    qteRef.current.t0 = Date.now();
+    // eslint-disable-next-line
+  }, [cr && cr.scene && cr.scene.mid, cr && cr.scene && cr.scene.step]);
+  // MECÂNICA QTE (Contenção/Segurança): tocar dentro da janela da barra oscilante.
+  function qteTap() {
+    const sc = cr.scene; if (!sc) return;
+    const mission = MISSIONS.find(m => m.id === sc.mid);
+    const step = mission.steps[sc.step]; const qte = step.qte || {};
+    const period = qte.period || 1400;
+    const elapsed = (Date.now() - (qteRef.current.t0 || Date.now())) % period;
+    const phase = elapsed / period;                 // 0..1
+    const pos = phase < 0.5 ? phase * 2 : (1 - phase) * 2; // vai-e-volta 0..1..0
+    const [wStart, wEnd] = qte.window || [0.38, 0.62];
+    const hit = pos >= wStart && pos <= wEnd;
+    resolveMech(hit ? qte.w : qte.f, hit);
+    Audio.play(hit ? "conquer" : "alert");
+  }
+  // Efeito de contagem regressiva das mecânicas com tempo (timer / memorização).
+  useEffect(() => {
+    const sc = cr && cr.scene;
+    if (!sc) return;
+    const mission = MISSIONS.find(m => m.id === sc.mid);
+    const step = mission && mission.steps[sc.step];
+    if (!step) return;
+    const isTimer = step.type === "timer" && sc.phase === "prompt";
+    const isMemorize = step.type === "memory" && sc.phase === "prompt" && memPhase === "memorize";
+    if (!isTimer && !isMemorize) return;
+    const total = isTimer ? (step.time || 8) : (step.mem && step.mem.show || 4);
+    setMechTimer(total);
+    const started = Date.now();
+    const iv = setInterval(() => {
+      const left = total - (Date.now() - started) / 1000;
+      if (left <= 0) {
+        clearInterval(iv);
+        setMechTimer(0);
+        if (isTimer) { const opt = step.c[step.onTimeout != null ? step.onTimeout : step.c.length - 1]; chooseOption(opt); }
+        else { setMemPhase("recall"); }
+      } else setMechTimer(left);
+    }, 100);
+    return () => clearInterval(iv);
+    // eslint-disable-next-line
+  }, [cr && cr.scene && cr.scene.mid, cr && cr.scene && cr.scene.step, cr && cr.scene && cr.scene.phase, memPhase]);
   function answerEvent(choice) {
     updateCr(c => {
       if (choice.cost && c.cash < choice.cost) return c;
@@ -5144,6 +5371,13 @@ export default function App() {
           c.promo = RANKS_FC[c.rank];
           chronPush(c, 1, c.week, `${c.pname} subiu a ${c.promo} no ${BASE_FAC[c.mother].short}`, "promo");
           if (c.rank === 1) c._achv.push("degrau");
+          // CONTENÇÃO: cerimônia do ferro — o mentor entrega a arma em nome do chefe
+          if (c.rank === 3 && !c.gear.arma) {
+            c.gear.arma = true;
+            const cast = careerCast(c.mother);
+            c.log = (c.log ? c.log + "\n" : "") + `🔫 ${cast.mgr} te chamou no fundo do beco e entregou um ferro embrulhado em pano: "${cast.boss} mandou dizer que agora o morro dorme porque você tá acordado." (arma equipada: +13% em ações de combate)`;
+            chronPush(c, 2, c.week, `Recebeu a arma da facção das mãos de ${cast.mgr}`, "promo");
+          }
         }
         if (c.rank === 4 && c.merit >= THRESH[4]) c.final = true;
       }
@@ -5793,6 +6027,52 @@ export default function App() {
       setScreen("fsetup");
     }
   }
+  // CARREIRA v2: promoção a GERENTE — encerra a carreira e abre o mapa tutelado.
+  function promoteToGerente() {
+    const mother = cr.mother;
+    const cast = careerCast(mother);
+    const chron = (cr.chron || []).slice();
+    const rd = cr.people.find(p => p.redeemed && p.id === "neguinho");
+    const rivName = !rd && cr.riv >= 2 ? CH.rivF : null;
+    let rivFac = !rd && cr.riv >= 2 ? AI_ALL.find(f => f !== mother) : null;
+    const gg = initStrategy({
+      mode:"fc", fname:`Gerência ${BASE_FAC[mother].short}`, fcolor: BASE_FAC[mother].color,
+      cash: 65 + Math.floor(cr.cash / 4), soldiers: 12, ally: mother,
+      morale: 60, rivName, rivFac, chron,
+      careerGov: { mother, targetZones: 4, loyal: cr.loyal, pname: cr.pname },
+    });
+    gg.msg = `👑 ${cast.boss} te deu um campo: uma zona pra você provar que sabe mandar. Conquiste 4 territórios e vire chefe. Mas jamais toque no que é da ${BASE_FAC[mother].short}.`;
+    setG(gg); setScreen("game"); setTab("mapa"); setCr(null); setShowHelp(true);
+    persist({ phase:"strategy", g: gg });
+  }
+  // CARREIRA v2: ascensão a CHEFE (in-place, mantém o mapa) — 3 caminhos.
+  function ascendToChefe(choice) {
+    const gov = g && g.careerGov;
+    if (!gov) return;
+    const mother = gov.mother, cast = careerCast(mother);
+    update(s => {
+      if (choice === "herdar") {
+        for (let i = 0; i < s.terr.length; i++) if (s.terr[i].owner === mother) s.terr[i].owner = "me";
+        s.aiFacs = s.aiFacs.filter(f => f !== mother);
+        s.alliances[mother] = 0;
+        if (!s._achv.includes("herdeiro")) s._achv.push("herdeiro");
+        s.msg = `👑 SUCESSÃO: ${cast.boss} te entregou a ${BASE_FAC[mother].name}. Todo o território é seu agora.`;
+      } else if (choice === "trair") {
+        s.alliances[mother] = -1;
+        if (!s._achv.includes("traidor")) s._achv.push("traidor");
+        s.msg = `⚔ INDEPENDÊNCIA: você fundou sua própria facção. ${cast.boss} virou seu maior inimigo.`;
+      } else {
+        s.alliances[mother] = 1;
+        if (!s._achv.includes("fundador")) s._achv.push("fundador");
+        s.msg = `🤝 CHEFE ALIADO: você comanda seu território como sócio de ${cast.boss}. O mapa inteiro está aberto.`;
+      }
+      s.careerGov = null;
+      s.careerAscend = false;
+      chronPush(s, 5, s.turn, choice === "herdar" ? `Herdou a ${BASE_FAC[mother].short}` : choice === "trair" ? `Fundou facção própria contra a ${BASE_FAC[mother].short}` : `Virou chefe aliado da ${BASE_FAC[mother].short}`, "promo");
+      return s;
+    });
+    Audio.play("conquer");
+  }
   function launchFaction() {
     const nm = fname.trim() || "Comando da Lua";
     let gg;
@@ -5828,6 +6108,8 @@ export default function App() {
   const prodPerWeek = owned.reduce((a, z) => a + tierProd[T_TIER[z]], 0);
   const inReach = i => g && ADJ[i].some(a => g.terr[a].owner === ME);
   const isAllied = ow => g && !isPolice && AI_ALL.includes(ow) && g.alliances && g.alliances[ow] === 1;
+  // Zona da facção-mãe durante a tutela da carreira (fase Gerente): atacar = traição.
+  const isMotherZone = zi => g && g.careerGov && zi != null && g.terr[zi] && g.terr[zi].owner === g.careerGov.mother;
   // V4.6: no modo polícia, zona NEUTRA não tem guerra — só pacificação (ver pacifiable).
   const attackable = sel != null && g && g.terr[sel].owner !== ME && inReach(sel) && !g.plans.some(p => p.target === sel) && !isAllied(g.terr[sel].owner) && (isPolice || g.jailBoss === 0) && !(isPolice && g.terr[sel].owner === "nt");
   // V4.6: zona pacificável — polícia, zona neutra, ao alcance e ainda sem domínio do Estado.
@@ -5853,6 +6135,43 @@ export default function App() {
       s.informants = s.informants || { cs:0, fd:0, cv:0 };
       s.informants[f] = lvl + 1;
       s.msg = `🕵 Informante ${tier.label} recrutado no ${BASE_FAC[f].name}. Novas informações liberadas.`;
+      return s;
+    });
+  }
+  // ---- Gerentes de vendas do jogador (facção) ----
+  const mgrCost = pL => 20 + pL * 15; // custo (em unidades) para treinar até o próximo nível
+  function hireManager() {
+    if ((g.managers || []).length >= MAX_MANAGERS) return;
+    spend(30, s => {
+      s.managers = [...(s.managers || []), mkManager(s.managers)];
+      s.msg = `💼 ${s.managers[s.managers.length - 1].name} contratado como gerente de vendas.`;
+      return s;
+    });
+  }
+  function levelManager(id) {
+    const m = (g.managers || []).find(x => x.id === id);
+    if (!m || m.payLevel >= m.maxPayLevel) return;
+    spend(mgrCost(m.payLevel), s => {
+      const mm = (s.managers || []).find(x => x.id === id);
+      if (mm && mm.payLevel < mm.maxPayLevel) { mm.payLevel += 1; s.msg = `💼 ${mm.name} treinado — nível ${mm.payLevel}/${mm.maxPayLevel} (+${Math.round(managerYieldPct(mm.payLevel) * 100)}%/zona).`; }
+      return s;
+    });
+  }
+  function fireManager(id) {
+    update(s => {
+      const m = (s.managers || []).find(x => x.id === id);
+      s.managers = (s.managers || []).filter(x => x.id !== id);
+      s.msg = m ? `💼 ${m.name} foi dispensado. As zonas dele ficaram sem gerência.` : s.msg;
+      return s;
+    });
+  }
+  // Atribui a zona zi ao gerente mgrId (removendo-a de qualquer outro). mgrId=null → sem gerente.
+  function assignZoneManager(mgrId, zi) {
+    update(s => {
+      for (const m of (s.managers || [])) m.zones = (m.zones || []).filter(z => z !== zi);
+      if (mgrId) { const m = (s.managers || []).find(x => x.id === mgrId); if (m) m.zones = [...(m.zones || []), zi]; }
+      const nm = mgrId ? (s.managers.find(x => x.id === mgrId) || {}).name : null;
+      s.msg = nm ? `💼 ${nm} agora gere ${T_NAMES[zi]}.` : `💼 ${T_NAMES[zi]} ficou sem gerente.`;
       return s;
     });
   }
@@ -6149,16 +6468,10 @@ export default function App() {
     update(s => {
       const amt = Math.min(sellAmt, s.product);
       if (amt <= 0) return s;
-      let revenue = amt * s.price;
-      // Bônus do gerente: +20% máximo
-      if (s.managers && s.managers.payLevel > 0) {
-        const mgrBonus = Math.round(revenue * ((s.managers.payLevel / s.managers.maxPayLevel) * 0.2));
-        revenue += mgrBonus;
-      }
+      const revenue = amt * s.price;
       s.product -= amt; s.cash += revenue;
       s.heat = Math.min(120, s.heat + Math.ceil(amt / 10));
-      const mgrNote = s.managers ? ` (gerente: +${Math.round((s.managers.payLevel / s.managers.maxPayLevel) * 20)}%)` : "";
-      s.msg = `✔ ${amt} un. escoadas por ${brMoney(revenue)}.${mgrNote}`;
+      s.msg = `✔ ${amt} un. escoadas por ${brMoney(revenue)}.`;
       return s;
     });
     setSellAmt(0);
@@ -6172,11 +6485,15 @@ export default function App() {
       } else s.msg = `✖ ${BASE_FAC[f].name} recusou — e ficou com o dinheiro.`;
     });
   }
-  const breakAlliance = f => update(s => { s.alliances[f] = -1; s.msg = `⚠ Pacto rompido. ${BASE_FAC[f].name} te vê como alvo.`; return s; });
+  const breakAlliance = f => update(s => {
+    if (s.careerGov && f === s.careerGov.mother) { s.msg = `É a facção que te criou. Ainda não — prove seu valor antes de virar as costas.`; return s; }
+    s.alliances[f] = -1; s.msg = `⚠ Pacto rompido. ${BASE_FAC[f].name} te vê como alvo.`; return s;
+  });
   // PROVOCAR rival: sobe o ódio dele contra você (em troca de algum benefício e risco)
   function provokeRival(f, offenseId) {
     const off = OFFENSE_TYPES.find(o => o.id === offenseId);
     if (!off) return;
+    if (g && g.careerGov && f === g.careerGov.mother) { update(s => { s.msg = "Provocar quem te criou é suicídio. Ainda não."; return s; }); return; }
     spend(off.cost, s => {
       s.rivalHate = s.rivalHate || { cs:0, fd:0, cv:0 };
       const before = s.rivalHate[f] || 0;
@@ -6206,6 +6523,7 @@ export default function App() {
   }
   function planOp(type) {
     const total = UKEYS.reduce((s2, k) => s2 + opComp[k], 0);
+    if (sel != null && isMotherZone(sel)) { setBetrayZone(sel); return; } // tutela: traição
     if (!attackable || total < 1 || g.plans.length >= maxOps) return;
     update(s => {
       const useNade = opNade && (s.nades[opNade] || 0) > 0 ? opNade : null;
@@ -6240,6 +6558,7 @@ export default function App() {
   });
   // Saque rápido pelo mapa: auto-aloca todas as tropas disponíveis em plano tipo raid
   function doQuickRaid(zoneIdx) {
+    if (isMotherZone(zoneIdx)) { setBetrayZone(zoneIdx); return; }
     const t = g.terr[zoneIdx];
     if (!t || t.owner === ME || t.owner === "nt" || isPolice) return;
     if (isAllied(t.owner)) return;
@@ -6267,6 +6586,7 @@ export default function App() {
   // Roubo pelo mapa (assalto direto numa zona): executa imediatamente o golpe do tipo da zona.
   // Zona de facção → gera ÓDIO; zona neutra → aumenta o nível de PROCURADO (pressão).
   function doMapHeist(zoneIdx) {
+    if (isMotherZone(zoneIdx)) { setBetrayZone(zoneIdx); return; }
     if (zoneIdx == null || isPolice) return;
     const t = g.terr[zoneIdx];
     if (!t || t.owner === ME || isAllied(t.owner)) return;
@@ -6402,6 +6722,7 @@ export default function App() {
   }
   function abrirConfronto(zone) {
     if (zone == null || !g || !g.terr[zone]) return;
+    if (isMotherZone(zone)) { setBetrayZone(zone); return; } // tutela: atacar a mãe = traição
     const t = g.terr[zone];
     const comp = { ...opComp };
     const total = UKEYS.reduce((s2, k) => s2 + (comp[k] || 0), 0);
@@ -6610,8 +6931,8 @@ export default function App() {
         totalCost += count * unitCost;
       }
       // Staff facção
-      if (s.managers && s.managers.payLevel > 0) {
-        totalCost += STAFF_MAINTENANCE.gerente;
+      for (const m of (s.managers || [])) {
+        if (m) totalCost += STAFF_MAINTENANCE.gerente;
       }
       for (const law of (s.lawyers || [])) {
         if (law && law.payLevel > 0) {
@@ -7115,8 +7436,28 @@ export default function App() {
 
         // ARRECADAÇÃO POR TERRITÓRIO: cada zona dominada paga um valor semanal em caixa.
         // Perder a zona = perder essa renda. (mesmo valor exibido no dossiê de investigação)
-        const arrecadacao = Math.round(myZones().reduce((a2, z) => a2 + zoneRevenue(z), 0) * capMult);
+        const ownedSet = new Set(myZones());
+        const arrecadacao = Math.round([...ownedSet].reduce((a2, z) => a2 + zoneRevenue(z), 0) * capMult);
         s.cash += arrecadacao;
+
+        // MESADA da facção-mãe durante a tutela (fase Gerente): o chefe banca seu crescimento.
+        if (s.careerGov) {
+          const mesada = 18 + Math.floor(s.turn * 1.5);
+          s.cash += mesada;
+          ev.push({ tone:"info", text:`💵 Mesada da ${BASE_FAC[s.careerGov.mother].short}: +${brMoney(mesada)} — ${careerCast(s.careerGov.mother).boss} banca sua gerência enquanto você cresce.` });
+        }
+
+        // GERENTES DE VENDAS: cada gerente vende a mercadoria das zonas que gere e traz lucro extra
+        // proporcional ao seu nível. Zonas perdidas saem automaticamente da carteira do gerente
+        // (o gerente permanece, livre para gerir outra área).
+        let mgrLucro = 0;
+        for (const m of (s.managers || [])) {
+          m.zones = (m.zones || []).filter(z => ownedSet.has(z));   // solta zonas perdidas
+          const pct = managerYieldPct(m.payLevel);
+          for (const z of m.zones) mgrLucro += zoneRevenue(z) * pct;
+        }
+        mgrLucro = Math.round(mgrLucro * capMult);
+        s.cash += mgrLucro;
 
         // V4.3: Manutenção de tropas (economia v2)
         const maintenanceCost = calculateMaintenanceCosts(s);
@@ -7130,7 +7471,7 @@ export default function App() {
         if (s.assets.a2) s.morale = Math.min(100, s.morale + 1);
         if (s.assets.a3) s.morale = Math.min(100, s.morale + 1);
         const govNote = gt.id === "corrupto" || gt.id === "permissivo" ? ` · ${gt.icon} ${gt.label} blinda o movimento` : gt.id === "aliado" || gt.id === "favoravel" ? ` · ${gt.icon} ${gt.label} aperta o cerco` : "";
-        ev.push({ tone:"info", text:`▤ Arrecadação dos territórios: +${brMoney(arrecadacao)} (${myZones().length} zona${myZones().length !== 1 ? "s" : ""}${hasCapital ? " · 👑+25% capital" : ""}) · Movimento: +${prod} un. (estoque ${s.product}) · Manutenção: −${brMoney(maintenanceCost)}. Preço: ${brMoney(s.price)}/un.${govNote}` });
+        ev.push({ tone:"info", text:`▤ Arrecadação dos territórios: +${brMoney(arrecadacao)} (${myZones().length} zona${myZones().length !== 1 ? "s" : ""}${hasCapital ? " · 👑+25% capital" : ""})${mgrLucro > 0 ? ` · 💼 Gerentes venderam: +${brMoney(mgrLucro)}` : ""} · Movimento: +${prod} un. · Manutenção: −${brMoney(maintenanceCost)}.${govNote}` });
         if (s.cash < 0) {
           s.cash = 0; takeLosses(s, 5);
           s.morale = Math.max(5, s.morale - 6);
@@ -7194,14 +7535,14 @@ export default function App() {
         }
         // ----- V4.3: PAGAMENTO DE STAFF ATIVO (economia v2) -----
         let staffCost = 0;
-        if (s.managers && s.managers.payLevel > 0) {
+        for (const m of [...(s.managers || [])]) {
           const gerCost = STAFF_MAINTENANCE.gerente;
           if (s.cash >= gerCost) {
             s.cash -= gerCost;
             staffCost += gerCost;
           } else {
-            s.managers = null;
-            ev.push({ tone:"warn", text:`💼 Gerente saiu — caixa insuficiente para pagamento.` });
+            s.managers = s.managers.filter(x => x.id !== m.id);
+            ev.push({ tone:"warn", text:`💼 ${m.name} saiu — caixa insuficiente para pagamento.` });
           }
         }
         for (let i = 0; i < (s.lawyers || []).length; i++) {
@@ -7773,7 +8114,12 @@ export default function App() {
         else if (s.over === "lose") { chronPush(s, 5, s.turn, s.overReason || "A segurança pública colapsou", "fim"); }
       }
       const finalOwned = myZones().length;
-      if (!isPol && finalOwned >= NZ) {
+      // CARREIRA v2 — ascensão a CHEFE: atingiu a meta de territórios sob tutela
+      if (!isPol && s.careerGov && !s.careerAscend && finalOwned >= s.careerGov.targetZones) {
+        s.careerAscend = true;
+        chronPush(s, 5, s.turn, `${s.careerGov.pname} conquistou ${s.careerGov.targetZones} territórios — hora de virar chefe`, "promo");
+      }
+      if (!isPol && !s.careerGov && finalOwned >= NZ) {
         if (s.legacy) {
           // já está no modo legado e dominou tudo de novo: marco de domínio total
           s.legacyDominations = (s.legacyDominations || 0) + 1;
@@ -8350,7 +8696,7 @@ export default function App() {
                   </div>
                 </div>
               )}
-              {cr.log && <div className="font-mono text-xs leading-relaxed rounded-lg p-3" style={{ background:C.panel2, color:C.warn, whiteSpace:"pre-line" }}>{cr.log}</div>}
+              {cr.log && <div className="font-mono text-xs leading-relaxed rounded-lg p-3" style={{ background:C.panel2, color:C.warn, whiteSpace:"pre-line" }}>{castText(cr.log, cr.mother)}</div>}
               {cr.jail > 0 ? (
                 <Card>
                   <div className="font-mono font-bold text-sm" style={{ color:C.bad, letterSpacing:"0.08em" }}>🔒 ATRÁS DAS GRADES</div>
@@ -8367,28 +8713,22 @@ export default function App() {
               ) : finalReady ? (
                 <Card>
                   <div className="font-mono font-bold text-sm" style={{ color:C.warn, letterSpacing:"0.08em" }}>
-                    {cr.side === "fc" ? `★ A CHAMADA DE ${CH.boss.toUpperCase()}` : "★ NOMEAÇÃO: DIRETOR-GERAL"}
+                    {cr.side === "fc" ? `★ PROMOÇÃO: GERENTE DE ÁREA` : "★ NOMEAÇÃO: DIRETOR-GERAL"}
                   </div>
                   <div className="text-xs mt-2 leading-relaxed" style={{ color:C.mut }}>
                     {cr.side === "fc"
-                      ? `${CH.boss} mandou te buscar. No terraço, ele olha a cidade e diz: 'Chegou tua hora, ${cr.pname}. A pergunta é: que tipo de hora?'`
+                      ? `${careerCast(cr.mother).boss} te chamou no terraço. 'Você provou tudo que tinha pra provar como soldado, ${cr.pname}. Agora vou te dar um campo — uma quebrada pra você mandar. Faz ela crescer. Conquista as vizinhas. Me mostra que você nasceu pra ser dono.'`
                       : `Três fardas, uma trajetória. Como Diretor-Geral ${cr.corr > 0 ? "— e que seus arquivos continuem sumidos —" : "de ficha impecável,"} a cidade inteira passa a ser sua responsabilidade.`}
                   </div>
                   <div className="flex flex-col gap-2 mt-3">
                     {cr.side === "fc" ? (
                       <>
-                        <Btn onClick={() => finishCareer("herdar")} disabled={cr.loyal < 50} full>
-                          HERDAR O TRONO {cr.loyal < 50 ? `(exige lealdade 50 — você tem ${cr.loyal})` : `— ${BASE_FAC[cr.mother].name.toUpperCase()}`}
-                        </Btn>
-                        <Btn onClick={() => finishCareer("braco")} disabled={cr.cash < 150} color="#7A5FA8" full>
-                          FUNDAR UM BRAÇO ALIADO {cr.cash < 150 ? "(exige R$ 243 mil)" : "— R$ 243 mil"}
-                        </Btn>
-                        <Btn onClick={() => finishCareer("trair")} color={C.bad} full>
-                          TRAIR: LEVAR O CAIXA E A TROPA
+                        <Btn onClick={promoteToGerente} full>
+                          🗺 ASSUMIR A GERÊNCIA — {BASE_FAC[cr.mother].name.toUpperCase()}
                         </Btn>
                         {BIZ.every(b => cr.biz[b.k]) && (
                           <Btn onClick={becomeMagnata} color={C.warn} full>
-                            🎩 VIRAR MAGNATA: LEGALIZAR O IMPÉRIO E SAIR POR CIMA
+                            🎩 RECUSAR O MORRO E LEGALIZAR: VIRAR MAGNATA
                           </Btn>
                         )}
                       </>
@@ -8437,12 +8777,12 @@ export default function App() {
                     return (
                       <Card key={id}>
                         <div className="flex justify-between items-start">
-                          <div className="font-bold text-sm">{m.title}</div>
+                          <div className="font-bold text-sm">{castText(m.title, cr.mother)}</div>
                           <span className="font-mono" style={{ fontSize:10, color: m.risk === "alto" ? C.bad : m.risk === "médio" ? C.warn : C.good }}>
                             risco {m.risk}
                           </span>
                         </div>
-                        <div className="text-xs mt-1" style={{ color:C.mut }}>{m.desc}</div>
+                        <div className="text-xs mt-1" style={{ color:C.mut }}>{castText(m.desc, cr.mother)}</div>
                         <div className="flex justify-between items-center mt-2">
                           <span className="font-mono" style={{ fontSize:10, color:C.mut }}>{m.pay}</span>
                           <Btn onClick={() => startMission(id)} disabled={cr.hp < 40}>ACEITAR ▸</Btn>
@@ -8610,29 +8950,102 @@ export default function App() {
 
         {cr.scene && mission && (
           <Modal>
-            <div className="font-mono font-bold mb-1" style={{ letterSpacing:"0.1em", color:sideColor }}>{mission.title.toUpperCase()}</div>
+            <div className="font-mono font-bold mb-1" style={{ letterSpacing:"0.1em", color:sideColor }}>{castText(mission.title, cr.mother).toUpperCase()}</div>
             <div className="font-mono mb-3" style={{ fontSize:10, color:C.mut }}>PARTE {cr.scene.step + 1}/{mission.steps.length}</div>
-            {cr.scene.phase === "prompt" && (
-              <>
-                <div className="text-sm leading-relaxed mb-4">{mission.steps[cr.scene.step].t}</div>
+            {cr.scene.phase === "prompt" && (() => {
+              const step = mission.steps[cr.scene.step];
+              const type = step.type || "choice";
+              const choiceButtons = (
                 <div className="flex flex-col gap-2">
-                  {mission.steps[cr.scene.step].c.map((opt, i) => (
+                  {(step.c || []).map((opt, i) => (
                     <button key={i} onClick={() => chooseOption(opt)}
                       className="text-left rounded-lg p-3 font-mono text-xs"
                       style={{ background:C.panel2, border:`1px solid ${C.line}`, color:C.text }}>
-                      ▸ {opt.l}
+                      ▸ {castText(opt.l, cr.mother)}
                       {opt.tag && cr.gear[opt.tag] && <span style={{ color:C.good }}> ✔ equipado</span>}
                     </button>
                   ))}
                 </div>
-              </>
-            )}
+              );
+              if (type === "timer") {
+                const total = step.time || 8;
+                const left = mechTimer == null ? total : mechTimer;
+                const pct = Math.max(0, Math.min(100, (left / total) * 100));
+                return (<>
+                  <div className="text-sm leading-relaxed mb-2">{castText(step.t, cr.mother)}</div>
+                  <div className="font-mono mb-1" style={{ fontSize:10, color: left < 3 ? C.bad : C.warn }}>⏱ DECIDA JÁ — {left.toFixed(1)}s</div>
+                  <div className="rounded-full overflow-hidden mb-3" style={{ height:6, background:C.panel2 }}>
+                    <div style={{ width:pct + "%", height:"100%", background: left < 3 ? C.bad : C.warn, transition:"width .1s linear" }} />
+                  </div>
+                  {choiceButtons}
+                </>);
+              }
+              if (type === "luck") {
+                const trip = step.trip || {};
+                const trips = cr.scene.trips || 0;
+                const nextRisk = Math.min(0.92, (trip.risk0 || 0.08) + trips * (trip.riskInc || 0.14) - (step.tag && cr.gear[step.tag] ? 0.05 : 0));
+                return (<>
+                  <div className="text-sm leading-relaxed mb-3">{castText(step.t, cr.mother)}</div>
+                  <div className="rounded-lg p-3 mb-3" style={{ background:C.panel2, border:`1px solid ${C.line}` }}>
+                    <div className="flex justify-between font-mono text-xs mb-1"><span style={{ color:C.mut }}>Viagens feitas</span><b>{trips}</b></div>
+                    <div className="flex justify-between font-mono text-xs mb-1"><span style={{ color:C.mut }}>No bolso</span><b style={{ color:C.good }}>+R$ {cr.scene.acc.m}</b></div>
+                    <div className="flex justify-between font-mono text-xs"><span style={{ color:C.mut }}>Risco da próxima</span><b style={{ color: nextRisk > 0.5 ? C.bad : C.warn }}>{Math.round(nextRisk * 100)}%</b></div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => luckTrip(true)} className="pe-btn flex-1 rounded-lg py-3 font-mono font-bold" style={{ fontSize:11, background:"#2d1f0a", color:C.warn, border:`1px solid ${C.warn}` }}>🏃 MAIS UMA VIAGEM</button>
+                    <button onClick={() => luckTrip(false)} disabled={trips === 0} className="pe-btn flex-1 rounded-lg py-3 font-mono font-bold" style={{ fontSize:11, background: trips === 0 ? C.panel2 : "#0f2417", color: trips === 0 ? C.mut : C.good, border:`1px solid ${trips === 0 ? C.line : C.good}` }}>✔ ENCERRAR NO LUCRO</button>
+                  </div>
+                </>);
+              }
+              if (type === "memory") {
+                if (memPhase === "memorize") {
+                  const total = (step.mem && step.mem.show) || 4;
+                  const left = mechTimer == null ? total : mechTimer;
+                  return (<>
+                    <div className="text-sm leading-relaxed mb-2">{castText(step.t, cr.mother)}</div>
+                    <div className="font-mono mb-2" style={{ fontSize:10, color:C.warn }}>🧠 MEMORIZE — {left.toFixed(1)}s</div>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {((step.mem && step.mem.showItems) || []).map((it, i) => (
+                        <div key={i} className="font-mono rounded-lg px-3 py-2" style={{ fontSize:14, fontWeight:700, background:C.panel2, border:`1px solid ${C.warn}`, color:"#fff" }}>{it}</div>
+                      ))}
+                    </div>
+                  </>);
+                }
+                return (<>
+                  <div className="text-sm leading-relaxed mb-3">{castText((step.mem && step.mem.question) || "Qual era?", cr.mother)}</div>
+                  <div className="flex flex-col gap-2">
+                    {((step.mem && step.mem.options) || []).map((op, i) => (
+                      <button key={i} onClick={() => memoryRecall(i)} className="text-left rounded-lg p-3 font-mono text-xs" style={{ background:C.panel2, border:`1px solid ${C.line}`, color:C.text }}>▸ {op}</button>
+                    ))}
+                  </div>
+                </>);
+              }
+              if (type === "qte") {
+                const qte = step.qte || {};
+                const [wStart, wEnd] = qte.window || [0.38, 0.62];
+                const period = qte.period || 1400;
+                return (<>
+                  <div className="text-sm leading-relaxed mb-3">{castText(step.t, cr.mother)}</div>
+                  <div className="font-mono mb-1" style={{ fontSize:10, color:C.warn }}>🎯 TOQUE quando o marcador cruzar a zona verde</div>
+                  <div style={{ position:"relative", height:26, background:C.panel2, borderRadius:99, overflow:"hidden", marginBottom:12 }}>
+                    <div style={{ position:"absolute", left:(wStart * 100) + "%", width:((wEnd - wStart) * 100) + "%", top:0, bottom:0, background:C.good + "44", borderLeft:`2px solid ${C.good}`, borderRight:`2px solid ${C.good}` }} />
+                    <div style={{ position:"absolute", top:2, bottom:2, width:6, borderRadius:3, background:"#fff", animation:`qteSlide ${period}ms linear infinite` }} />
+                  </div>
+                  <style>{`@keyframes qteSlide { 0% { left:0%; } 50% { left:calc(100% - 6px); } 100% { left:0%; } }`}</style>
+                  <button onClick={qteTap} className="pe-btn w-full rounded-lg py-4 font-mono font-bold" style={{ fontSize:14, background:"#160d10", color:"#ff7a5a", border:`1px solid ${C.bad}` }}>⚡ AGORA!</button>
+                </>);
+              }
+              return (<>
+                <div className="text-sm leading-relaxed mb-4">{castText(step.t, cr.mother)}</div>
+                {choiceButtons}
+              </>);
+            })()}
             {cr.scene.phase === "outcome" && cr.scene.out && (
               <>
                 <div className="font-mono text-xs mb-2" style={{ color: cr.scene.out.ok ? C.good : C.bad }}>
                   {cr.scene.out.ok ? "✔ DEU CERTO" : "✖ DEU ERRADO"}
                 </div>
-                <div className="text-sm leading-relaxed mb-4">{cr.scene.out.text}</div>
+                <div className="text-sm leading-relaxed mb-4">{castText(cr.scene.out.text, cr.mother)}</div>
                 <Btn onClick={continueScene} full>CONTINUAR ▸</Btn>
               </>
             )}
@@ -8660,7 +9073,7 @@ export default function App() {
         {cr.event && !cr.scene && (
           <Modal>
             <div className="font-mono font-bold mb-2" style={{ letterSpacing:"0.1em", color:C.warn }}>⚡ ACONTECEU</div>
-            <div className="text-sm leading-relaxed mb-4">{cr.event.t}</div>
+            <div className="text-sm leading-relaxed mb-4">{castText(cr.event.t, cr.mother)}</div>
             <div className="flex flex-col gap-2">
               {cr.event.c.map((ch, i) => (
                 <button key={i}
@@ -8670,7 +9083,7 @@ export default function App() {
                   style={{ background:C.panel2, border:`1px solid ${C.line}`,
                     color: ch.cost && cr.cash < ch.cost ? C.mut : C.text,
                     opacity: ch.cost && cr.cash < ch.cost ? 0.6 : 1 }}>
-                  ▸ {ch.l}
+                  ▸ {castText(ch.l, cr.mother)}
                 </button>
               ))}
             </div>
@@ -8989,6 +9402,16 @@ export default function App() {
             <Stat label="SOLDADOS" value={units} />
             <Stat label="ZONAS" value={`${owned.length}/${NZ}`} color={FAC(ME).color} />
           </div>
+          {g.careerGov && (
+            <div className="flex items-center gap-2 mt-2 rounded-lg px-2.5 py-1.5" style={{ background:`${BASE_FAC[g.careerGov.mother].color}18`, border:`1px solid ${BASE_FAC[g.careerGov.mother].color}66` }}>
+              <span style={{ fontSize:13 }}>🗺</span>
+              <div className="flex-1 min-w-0">
+                <div className="font-mono font-bold" style={{ fontSize:9.5, color:BASE_FAC[g.careerGov.mother].color, letterSpacing:"0.06em" }}>GERÊNCIA · {BASE_FAC[g.careerGov.mother].short}</div>
+                <div className="font-mono" style={{ fontSize:8.5, color:C.mut }}>Conquiste {g.careerGov.targetZones} territórios pra virar chefe · jamais ataque a {BASE_FAC[g.careerGov.mother].short}</div>
+              </div>
+              <div className="font-mono font-bold" style={{ fontSize:13, color:BASE_FAC[g.careerGov.mother].color }}>{owned.length}/{g.careerGov.targetZones}</div>
+            </div>
+          )}
         </div>
         )}
 
@@ -9323,6 +9746,33 @@ export default function App() {
                       💰 Arrecadação: {brMoney(zoneRevenue(sel))}/semana {g.terr[sel].owner === ME ? "— entra na sua caixa" : "— vai pra facção que dominar"}
                     </div>
                   )}
+                  {/* GERENTE DA ZONA (facção): atribuir/trocar gerente de vendas */}
+                  {!isPolice && g.terr[sel].owner === ME && (() => {
+                    const mgrHere = (g.managers || []).find(m => (m.zones || []).includes(sel));
+                    return (
+                      <div className="rounded-lg p-2 mt-2" style={{ background:C.panel2, border:`1px solid ${C.good}44` }}>
+                        <div className="font-mono font-bold" style={{ fontSize:9.5, color:C.good, letterSpacing:"0.05em" }}>💼 GERENTE DA ÁREA</div>
+                        <div className="font-mono" style={{ fontSize:11, color: mgrHere ? C.text : C.mut, marginTop:2 }}>
+                          {mgrHere ? `${mgrHere.name} (nv ${mgrHere.payLevel}) — vende +${brMoney(Math.round(zoneRevenue(sel) * managerYieldPct(mgrHere.payLevel)))}/sem aqui` : "Sem gerente nesta área"}
+                        </div>
+                        {(g.managers || []).length === 0 ? (
+                          <div className="font-mono" style={{ fontSize:8.5, color:C.mut, marginTop:3 }}>Contrate um gerente na aba TROPA para gerir esta zona.</div>
+                        ) : (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {(g.managers || []).map(m => {
+                              const active = (m.zones || []).includes(sel);
+                              return (
+                                <button key={m.id} onClick={() => assignZoneManager(active ? null : m.id, sel)}
+                                  className="pe-btn font-mono rounded px-2 py-1" style={{ fontSize:8.5, background: active ? C.good : C.panel, color: active ? "#000" : C.text, border:`1px solid ${active ? C.good : C.line}66` }}>
+                                  {active ? "✓ " : ""}{m.name.split(" ")[0]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {isPolice && g.security && g.civic && g.civic[sel] && (() => {
                     const cc = g.civic[sel];
                     const st = CITY_STATUS[cc.statusCidade] || CITY_STATUS.EM_RECUPERACAO;
@@ -9685,7 +10135,14 @@ export default function App() {
                   {g.terr[sel].owner !== ME && !inReach(sel) && (
                     <div className="font-mono mt-2" style={{ fontSize:11, color:C.warn }}>⚠ Fora de alcance — controle uma zona vizinha primeiro.</div>
                   )}
-                  {g.terr[sel].owner !== ME && isAllied(g.terr[sel].owner) && (
+                  {isMotherZone(sel) ? (
+                    <div className="mt-2">
+                      <div className="font-mono mb-1" style={{ fontSize:10, color:BASE_FAC[g.careerGov.mother].color }}>🛡 Território da {BASE_FAC[g.careerGov.mother].short} — a facção que te criou.</div>
+                      <button onClick={() => setBetrayZone(sel)} className="pe-btn w-full rounded-lg py-2 font-mono font-bold" style={{ fontSize:11, background:"#1a0808", color:"#ff5a5a", border:`1px solid ${C.bad}` }}>
+                        ⚔ TRAIR A {BASE_FAC[g.careerGov.mother].short}
+                      </button>
+                    </div>
+                  ) : g.terr[sel].owner !== ME && isAllied(g.terr[sel].owner) && (
                     <div className="font-mono mt-2" style={{ fontSize:11, color:C.warn }}>⚠ Pacto ativo — rompa o pacto em RELAÇÕES (abaixo) para atacar.</div>
                   )}
                   {attackable && g.plans.length >= maxOps && (
@@ -10764,67 +11221,55 @@ export default function App() {
               })()}
 
               {!isPolice && inTropa && (() => {
-                const mgrCost = (pL) => 3 + pL * 1.5;
                 const lawCost = (pL) => 3 + pL * 1.5;
+                const managers = g.managers || [];
                 return (
                   <Card>
                     <div className="font-mono font-bold mb-1" style={{ fontSize:11, letterSpacing:"0.1em" }}>👔 PESSOAL DA FACÇÃO</div>
                     <div className="font-mono mb-2" style={{ fontSize:9, color:C.mut }}>
-                      Gerentes aumentam renda de vendas · Gravatas (advogados) reduzem procurado.
+                      Gerentes vendem a mercadoria das zonas que gerem · Gravatas (advogados) reduzem procurado.
                     </div>
 
-                    {/* Gerente */}
-                    {(g.managers || false) !== false ? (
-                      <div className="rounded-lg p-2 mb-2 flex items-start gap-2" style={{ background:C.panel2, border:`1px solid ${C.good}55` }}>
-                        <span style={{ fontSize:14, flexShrink:0 }}>💼</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-mono font-bold text-xs" style={{ color:C.good }}>{g.managers.name} — Gerente</div>
-                          <div className="font-mono" style={{ fontSize:8.5, color:C.mut, marginBottom:6 }}>Aumenta renda: +{Math.round((g.managers.payLevel / g.managers.maxPayLevel) * 20)}%</div>
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <div className="flex-1 h-1.5 rounded" style={{ background:C.panel }}>
-                              <div className="h-full rounded" style={{ width:`${(g.managers.payLevel / g.managers.maxPayLevel) * 100}%`, background:C.good }} />
-                            </div>
-                            <span className="font-mono text-xs" style={{ color:C.mut }}>{g.managers.payLevel}/{g.managers.maxPayLevel}</span>
-                          </div>
-                          <div className="flex gap-1">
-                            <button
-                              className="pe-btn font-mono rounded px-2 py-1 text-xs flex-1"
-                              style={{ background: g.cash >= mgrCost(g.managers.payLevel) && g.managers.payLevel < g.managers.maxPayLevel ? "#2d4a2d" : C.panel, color: g.cash >= mgrCost(g.managers.payLevel) && g.managers.payLevel < g.managers.maxPayLevel ? C.good : C.mut, border:`1px solid ${g.cash >= mgrCost(g.managers.payLevel) && g.managers.payLevel < g.managers.maxPayLevel ? C.good : C.line}55` }}
-                              disabled={g.cash < mgrCost(g.managers.payLevel) || g.managers.payLevel >= g.managers.maxPayLevel}
-                              onClick={() => update(s => {
-                                const cost = mgrCost(s.managers.payLevel);
-                                if (s.cash < cost) { s.msg = "⚠ Caixa insuficiente."; return s; }
-                                s.cash -= cost;
-                                s.managers.payLevel += 1;
-                                s.msg = `💼 ${s.managers.name} recebeu aumento. Renda agora +${Math.round(((s.managers.payLevel) / s.managers.maxPayLevel) * 20)}%.`;
-                                return s;
-                              })}>
-                              {g.managers.payLevel >= g.managers.maxPayLevel ? "MÁXIMO" : `${brMoney(Math.round(mgrCost(g.managers.payLevel) * 1000))}`}
-                            </button>
-                            <button
-                              className="pe-btn font-mono rounded px-2 py-1 text-xs"
-                              style={{ color:C.bad, border:`1px solid ${C.bad}44`, fontSize:8 }}
-                              onClick={() => update(s => { s.managers = null; s.msg = `💼 ${g.managers.name} deixou a organização.`; return s; })}>
-                              ✕
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="rounded-lg p-2 mb-2 flex items-center justify-between" style={{ background:C.panel, border:`1px solid ${C.line}55` }}>
-                        <div>
-                          <div className="font-mono font-bold text-xs" style={{ color:C.mut }}>Sem gerente</div>
-                          <div className="font-mono" style={{ fontSize:8.5, color:C.mut }}>Contrate um para aumentar renda</div>
-                        </div>
-                        <button
-                          className="pe-btn font-mono rounded px-2 py-1 text-xs"
-                          style={{ background: g.cash >= 30 ? "#2d4a2d" : C.panel2, color: g.cash >= 30 ? C.good : C.mut, border:`1px solid ${g.cash >= 30 ? C.good : C.line}55` }}
-                          disabled={g.cash < 30}
-                          onClick={() => update(s => { s.managers = mkManager(); s.cash -= 30; s.msg = `💼 ${s.managers.name} contratado como gerente.`; return s; })}>
-                          {brMoney(30)}
+                    {/* Gerentes de vendas (até 5) */}
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-mono font-bold" style={{ fontSize:10, color:C.good }}>💼 GERENTES DE VENDAS ({managers.length}/{MAX_MANAGERS})</span>
+                      {managers.length < MAX_MANAGERS && (
+                        <button disabled={g.cash < 30} onClick={hireManager}
+                          className="pe-btn font-mono rounded px-2 py-1" style={{ fontSize:9, background: g.cash >= 30 ? "#2d4a2d" : C.panel2, color: g.cash >= 30 ? C.good : C.mut, border:`1px solid ${g.cash >= 30 ? C.good : C.line}55` }}>
+                          + contratar {brMoney(30)}
                         </button>
+                      )}
+                    </div>
+                    {managers.length === 0 && (
+                      <div className="font-mono rounded-lg p-2 mb-2" style={{ fontSize:9, color:C.mut, background:C.panel, border:`1px solid ${C.line}55` }}>
+                        Nenhum gerente. Contrate e atribua zonas (clicando na sua zona no mapa) para vender a mercadoria e lucrar mais.
                       </div>
                     )}
+                    {managers.map(m => {
+                      const cost = mgrCost(m.payLevel);
+                      const canLevel = m.payLevel < m.maxPayLevel && g.cash >= cost;
+                      return (
+                        <div key={m.id} className="rounded-lg p-2 mb-1.5" style={{ background:C.panel2, border:`1px solid ${C.good}44` }}>
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono font-bold text-xs" style={{ color:C.good }}>💼 {m.name}</span>
+                            <span className="font-mono" style={{ fontSize:8, color:C.mut }}>nv {m.payLevel}/{m.maxPayLevel} · +{Math.round(managerYieldPct(m.payLevel) * 100)}%/zona</span>
+                          </div>
+                          <div className="flex-1 h-1.5 rounded my-1" style={{ background:C.panel }}>
+                            <div className="h-full rounded" style={{ width:`${(m.payLevel / m.maxPayLevel) * 100}%`, background:C.good }} />
+                          </div>
+                          <div className="font-mono" style={{ fontSize:8.5, color: (m.zones || []).length ? C.text : C.mut, marginBottom:4 }}>
+                            {(m.zones || []).length ? `🗺 gere: ${m.zones.map(z => T_NAMES[z]).join(", ")}` : "sem zona — clique na sua zona no mapa para atribuir"}
+                          </div>
+                          <div className="flex gap-1">
+                            <button disabled={!canLevel} onClick={() => levelManager(m.id)}
+                              className="pe-btn font-mono rounded px-2 py-1 text-xs flex-1" style={{ background: canLevel ? "#2d4a2d" : C.panel, color: canLevel ? C.good : C.mut, border:`1px solid ${canLevel ? C.good : C.line}55` }}>
+                              {m.payLevel >= m.maxPayLevel ? "MÁXIMO" : `treinar ${brMoney(cost)}`}
+                            </button>
+                            <button onClick={() => fireManager(m.id)} className="pe-btn font-mono rounded px-2 py-1" style={{ fontSize:8, color:C.bad, border:`1px solid ${C.bad}44` }}>✕</button>
+                          </div>
+                        </div>
+                      );
+                    })}
 
                     {/* Gravatas */}
                     <div className="font-mono font-bold mb-1 mt-2" style={{ fontSize:10, letterSpacing:"0.1em" }}>🤝 ADVOGADOS (Gravatas)</div>
@@ -11433,6 +11878,65 @@ export default function App() {
             )}
           </div>
         )}
+
+        {/* === TRAIÇÃO CONFIRMÁVEL (carreira v2): atacar a facção-mãe === */}
+        {betrayZone != null && g.careerGov && (() => {
+          const mother = g.careerGov.mother;
+          const cast = careerCast(mother);
+          return (
+            <div onClick={() => setBetrayZone(null)} style={{ position:"fixed", inset:0, zIndex:98, background:"rgba(6,2,2,0.94)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+              <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:400, background:"#140809", border:`2px solid ${C.bad}`, borderRadius:14, boxShadow:`0 0 40px ${C.bad}66`, padding:18 }}>
+                <div className="font-mono font-bold text-center" style={{ fontSize:16, color:"#ff5a5a", letterSpacing:"0.05em", marginBottom:10 }}>⚠ ISSO É TRAIÇÃO</div>
+                <div className="text-sm leading-relaxed" style={{ color:C.text, marginBottom:8 }}>
+                  {T_NAMES[betrayZone]} é território da {BASE_FAC[mother].name}. Atacar a facção que te criou não tem volta: {cast.boss} vai mandar toda a força atrás de você, e a gerência acaba aqui.
+                </div>
+                <div className="font-mono" style={{ fontSize:10, color:C.mut, marginBottom:14 }}>Você será EXPULSO DO MOVIMENTO — fim de jogo. Tem certeza?</div>
+                <div className="flex gap-2">
+                  <button onClick={() => setBetrayZone(null)} className="pe-btn flex-1 rounded-lg py-2.5 font-mono font-bold" style={{ fontSize:12, background:C.panel2, color:C.text, border:`1px solid ${C.line}` }}>
+                    RECUAR
+                  </button>
+                  <button onClick={() => { const z = betrayZone; setBetrayZone(null); update(s => { s.over = "lose-expulso"; s.overReason = `Você traiu a ${BASE_FAC[mother].name}. ${cast.boss} não perdoa.`; chronPush(s, 5, s.turn, `Traiu a ${BASE_FAC[mother].short} e foi expulso do movimento`, "fim"); return s; }); Audio.play("vendetta"); }}
+                    className="pe-btn flex-1 rounded-lg py-2.5 font-mono font-bold" style={{ fontSize:12, background:"#3a0d0d", color:"#ff5a5a", border:`1px solid ${C.bad}` }}>
+                    ⚔ TRAIR MESMO ASSIM
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* === ASCENSÃO A CHEFE (carreira v2): atingiu a meta de territórios === */}
+        {g.careerAscend && g.careerGov && (() => {
+          const mother = g.careerGov.mother;
+          const cast = careerCast(mother);
+          const col = BASE_FAC[mother].color;
+          const canHerdar = (g.careerGov.loyal ?? 0) >= 50;
+          return (
+            <div style={{ position:"fixed", inset:0, zIndex:97, background:"rgba(2,3,6,0.94)", display:"flex", alignItems:"center", justifyContent:"center", padding:14 }}>
+              <div style={{ width:"100%", maxWidth:430, maxHeight:"92vh", overflowY:"auto", background:"#0b0e15", border:`2px solid ${col}`, borderRadius:14, boxShadow:`0 0 40px ${col}66`, padding:18 }}>
+                <div className="font-mono font-bold text-center" style={{ fontSize:15, color:"#fff", letterSpacing:"0.06em", marginBottom:4 }}>👑 A HORA DE VIRAR CHEFE</div>
+                <div className="font-mono text-center" style={{ fontSize:10, color:col, marginBottom:12 }}>{g.careerGov.pname} · {g.careerGov.targetZones} territórios conquistados</div>
+                <div className="text-sm leading-relaxed" style={{ color:C.text, marginBottom:14 }}>
+                  Você provou que sabe mandar. {cast.boss} te olha diferente agora — não como soldado, mas como igual. A quebrada inteira espera sua decisão. Que tipo de chefe você vai ser?
+                </div>
+                <div className="flex flex-col gap-2">
+                  <button onClick={() => ascendToChefe("aliado")} className="pe-btn rounded-lg py-3 font-mono font-bold text-left px-3" style={{ fontSize:12, background:`${col}22`, color:"#fff", border:`1px solid ${col}` }}>
+                    🤝 CHEFE ALIADO
+                    <div className="font-mono" style={{ fontSize:9, color:C.mut, fontWeight:400, marginTop:2 }}>Comande seu território como sócio de {cast.boss}. A {BASE_FAC[mother].short} continua sua aliada.</div>
+                  </button>
+                  <button onClick={() => ascendToChefe("trair")} className="pe-btn rounded-lg py-3 font-mono font-bold text-left px-3" style={{ fontSize:12, background:"#160d10", color:"#ff7a5a", border:`1px solid ${C.bad}` }}>
+                    ⚔ FUNDAR FACÇÃO PRÓPRIA
+                    <div className="font-mono" style={{ fontSize:9, color:C.mut, fontWeight:400, marginTop:2 }}>Declare independência. {cast.boss} vira seu maior inimigo — e a guerra é sua.</div>
+                  </button>
+                  <button onClick={() => canHerdar && ascendToChefe("herdar")} disabled={!canHerdar} className="pe-btn rounded-lg py-3 font-mono font-bold text-left px-3" style={{ fontSize:12, background: canHerdar ? "#D9B25F22" : C.panel2, color: canHerdar ? "#D9B25F" : C.mut, border:`1px solid ${canHerdar ? "#D9B25F" : C.line}`, opacity: canHerdar ? 1 : 0.6 }}>
+                    👑 HERDAR O TRONO {canHerdar ? "" : `(exige lealdade 50 — você tem ${g.careerGov.loyal ?? 0})`}
+                    <div className="font-mono" style={{ fontSize:9, color:C.mut, fontWeight:400, marginTop:2 }}>{cast.boss} te passa o comando: toda a {BASE_FAC[mother].name} vira sua de uma vez.</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* === FICHA DA FACÇÃO (dossiê: rosto do chefe + símbolo) === */}
         {facDossier && (() => {
@@ -12729,9 +13233,9 @@ export default function App() {
 
         {g.over && (
           <Modal>
-            <div className="text-3xl mb-2 text-center">{g.over === "win" ? (isPolice ? "🏅" : "👑") : g.over === "lose-dead" ? "💀" : "🚨"}</div>
+            <div className="text-3xl mb-2 text-center">{g.over === "win" ? (isPolice ? "🏅" : "👑") : g.over === "lose-dead" ? "💀" : g.over === "lose-expulso" ? "⚔" : "🚨"}</div>
             <div className="font-mono font-bold mb-2 text-center" style={{ letterSpacing:"0.1em" }}>
-              {g.over === "win" ? (isPolice ? "CIDADE PACIFICADA" : "A CIDADE É SUA") : g.over === "lose-dead" ? "XEQUE-MATE" : g.over === "lose-terr" ? (isPolice ? "BATALHÃO EXPULSO" : "FACÇÃO DESMANTELADA") : "COMANDO DESTITUÍDO"}
+              {g.over === "win" ? (isPolice ? "CIDADE PACIFICADA" : "A CIDADE É SUA") : g.over === "lose-dead" ? "XEQUE-MATE" : g.over === "lose-expulso" ? "EXPULSO DO MOVIMENTO" : g.over === "lose-terr" ? (isPolice ? "BATALHÃO EXPULSO" : g.careerGov ? "GERÊNCIA CASSADA" : "FACÇÃO DESMANTELADA") : "COMANDO DESTITUÍDO"}
             </div>
             <div className="text-sm text-center" style={{ color:C.mut }}>
               {g.legacy && g.over !== "win" ? (
@@ -12740,9 +13244,11 @@ export default function App() {
                 ? isPolice ? `Em ${g.turn - 1} semanas, as 40 cidades voltaram ao Estado.` : `Em ${g.turn - 1} semanas, ${g.fname} dominou cada cidade do Estado de Porto Esperança.`
                 : g.over === "lose-dead"
                   ? `O trono caiu e o chefe caiu com ele. ${g.rivName ? g.rivName + " mandou flores ao velório." : "A cidade já fala de outro nome."}`
-                  : g.over === "lose-terr"
-                    ? isPolice ? "As facções tomaram todas as zonas." : "Sem territórios, o movimento se desfez."
-                    : "A população perdeu a confiança. O governo interveio."}
+                  : g.over === "lose-expulso"
+                    ? (g.overReason || "Você virou as costas para quem te criou. Não há volta.")
+                    : g.over === "lose-terr"
+                      ? isPolice ? "As facções tomaram todas as zonas." : g.careerGov ? "Você perdeu a única zona que a facção te confiou. A gerência foi cassada — e sua ascensão, adiada para sempre." : "Sem territórios, o movimento se desfez."
+                      : "A população perdeu a confiança. O governo interveio."}
             </div>
             {(() => {
               const ch = (g.chron || []).slice().sort((a, b) => b.w - a.w || a.week - b.week).slice(0, 6).sort((a, b) => a.week - b.week);
