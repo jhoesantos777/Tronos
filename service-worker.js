@@ -1,10 +1,14 @@
 // TRONOS — Service Worker (cache para jogo offline)
-const CACHE = "tronos-v87-carreira-v2-mecanicas";
+const CACHE = "tronos-v92-icone-app";
 const CORE = [
   "./index.html",
   "./manifest.json",
   "./assets/game.js",
   "./assets/audio/trilha.mp3",
+  "./assets/ui/menu.jpg",
+  "./assets/icons/icon-180.png",
+  "./assets/icons/icon-192.png",
+  "./assets/icons/icon-512.png",
   "./assets/faccoes/simbolo_cs.png",
   "./assets/faccoes/simbolo_fd.png",
   "./assets/faccoes/simbolo_cv.png",
