@@ -1,5 +1,5 @@
 // TRONOS — Service Worker (cache para jogo offline)
-const CACHE = "tronos-v92-icone-app";
+const CACHE = "tronos-v94-gerentes-jogador";
 const CORE = [
   "./index.html",
   "./manifest.json",
@@ -15,6 +15,22 @@ const CORE = [
   "./assets/faccoes/chefe_cs.jpg",
   "./assets/faccoes/chefe_fd.jpg",
   "./assets/faccoes/chefe_cv.jpg",
+  "./assets/faccoes/gerente_cs_1.jpg",
+  "./assets/faccoes/gerente_cs_2.jpg",
+  "./assets/faccoes/gerente_cs_3.jpg",
+  "./assets/faccoes/gerente_cs_4.jpg",
+  "./assets/faccoes/gerente_fd_1.jpg",
+  "./assets/faccoes/gerente_fd_2.jpg",
+  "./assets/faccoes/gerente_fd_3.jpg",
+  "./assets/faccoes/gerente_fd_4.jpg",
+  "./assets/faccoes/gerente_cv_1.jpg",
+  "./assets/faccoes/gerente_cv_2.jpg",
+  "./assets/faccoes/gerente_cv_3.jpg",
+  "./assets/faccoes/gerente_cv_4.jpg",
+  "./assets/faccoes/pjger_1.jpg",
+  "./assets/faccoes/pjger_2.jpg",
+  "./assets/faccoes/pjger_3.jpg",
+  "./assets/faccoes/pjger_4.jpg",
   "https://unpkg.com/react@18/umd/react.production.min.js",
   "https://unpkg.com/react-dom@18/umd/react-dom.production.min.js",
   "https://cdn.tailwindcss.com",

@@ -220,6 +220,22 @@ function zoneManager(faction, zi) {
   if (!roster) return null;
   return roster[((zi * 7 + 3) % 4 + 4) % 4];
 }
+// Foto de cada gerente (nome → arquivo). 800×800 JPG, mesmo padrão dos chefes de facção.
+const MANAGER_PHOTO = {
+  "Waldir “Marreta” Nunes": "assets/faccoes/gerente_cs_1.jpg",
+  "Tonho “Fumaça” Reis": "assets/faccoes/gerente_cs_2.jpg",
+  "Zico do Alemão": "assets/faccoes/gerente_cs_3.jpg",
+  "Neno “Pistola” Farias": "assets/faccoes/gerente_cs_4.jpg",
+  "Percival “Doutor” Gomes": "assets/faccoes/gerente_fd_1.jpg",
+  "Gugu “Trator” Mendes": "assets/faccoes/gerente_fd_2.jpg",
+  "Careca de Ouro": "assets/faccoes/gerente_fd_3.jpg",
+  "Rui “Tigrão” Salles": "assets/faccoes/gerente_fd_4.jpg",
+  "Célio “Sombra” Prado": "assets/faccoes/gerente_cv_1.jpg",
+  "Ivo “Cebola” Martins": "assets/faccoes/gerente_cv_2.jpg",
+  "Betão “Sussurro” Lima": "assets/faccoes/gerente_cv_3.jpg",
+  "Dandinho da Baixada": "assets/faccoes/gerente_cv_4.jpg",
+};
+const managerPhotoOf = nome => MANAGER_PHOTO[nome] || null;
 const TACTIC_LABEL = { frontal:"⚡ Ataque Frontal", emboscada:"🌙 Emboscada" };
 // Monta a ficha de inteligência da zona: efetivo, força, movimentação semanal,
 // gerente da área e a fraqueza tática (que dá bônus se o jogador atacar por ela).
@@ -4299,21 +4315,27 @@ function policeForceMaintenanceCost(s) {
   const a = s.army || { b:0, a:0, d:0, e:0 };
   return UKEYS.reduce((tot, k) => tot + (a[k] || 0) * (FACTION_UNIT_MAINTENANCE[k] || 0), 0);
 }
-// Gerentes de vendas do JOGADOR (facção): até 5, cada um gere 1+ zonas e vende a mercadoria.
-// Nomes próprios (não se repetem entre si nem com os gerentes das facções rivais).
-const MAX_MANAGERS = 5;
-const PLAYER_MANAGER_NAMES = [
-  "Toninho Braço", "Márcio Fininho", "Jorge da Vila", "Bill Metralha",
-  "Paulão Cabral", "Deco Navalha", "Serginho Alvo", "Lucas Frentista",
-  "Wesley Cifrão", "Adão Relâmpago",
+// Gerentes de vendas do JOGADOR (facção): 4 personagens fixos, cada um gere 1+ zonas e vende
+// a mercadoria. Cada um tem foto e ficha própria (personalidade + especialidade).
+const PLAYER_MANAGERS = [
+  { name:"Jhow Jhow", photo:"assets/faccoes/pjger_1.jpg", trait:"Ambição — aprende rápido",
+    bio:"O caçula da firma. Cresceu vendo o corre e aprendeu ligeiro — hoje fecha conta que gente grande não fecha. Sonha em ter a própria boca um dia." },
+  { name:"Ferruge", photo:"assets/faccoes/pjger_2.jpg", trait:"Firmeza — cobrança pesada",
+    bio:"Veterano de mil corres. Chamam de Ferruge porque não enferruja: segue firme depois de tudo que já viu. Cobra dívida só no olhar, sem levantar a voz." },
+  { name:"Gordão", photo:"assets/faccoes/pjger_3.jpg", trait:"Relações — apoio da comunidade",
+    bio:"O queridão da quebrada. Conhece todo mundo pelo nome, paga a cerveja na laje e resolve treta na conversa. Onde ele gere, a comunidade fecha com o movimento." },
+  { name:"Feioso", photo:"assets/faccoes/pjger_4.jpg", trait:"Intimidação — ninguém caloteia",
+    bio:"Cara amarrada, poucas palavras. Não precisa dizer nada: caloteiro que vê o Feioso na esquina já saca a grana. É o susto que faz a venda andar." },
 ];
+const MAX_MANAGERS = PLAYER_MANAGERS.length; // 4
+const PLAYER_MANAGER_NAMES = PLAYER_MANAGERS.map(m => m.name);
+const playerManagerInfo = name => PLAYER_MANAGERS.find(m => m.name === name) || null;
 // Rendimento do gerente sobre a arrecadação de cada zona que ele gere: 15% (nível 0) → 100% (nível 5)
 const managerYieldPct = payLevel => 0.15 + (payLevel || 0) * 0.17;
 function mkManager(existing) {
   const used = new Set((existing || []).map(m => m && m.name));
-  const pool = PLAYER_MANAGER_NAMES.filter(n => !used.has(n));
-  const src = pool.length ? pool : PLAYER_MANAGER_NAMES;
-  const name = src[Math.floor(Math.random() * src.length)];
+  // contrata na ordem fixa (Jhow Jhow → Ferruge → Gordão → Feioso), pulando os já contratados
+  const name = PLAYER_MANAGER_NAMES.find(n => !used.has(n)) || PLAYER_MANAGER_NAMES[0];
   return { id: "mgr_" + Date.now() + "_" + Math.floor(Math.random() * 9999), type: "gerente", name, payLevel: 0, maxPayLevel: 5, zones: [] };
 }
 function mkLawyer() {
@@ -4911,6 +4933,8 @@ export default function App() {
   const [showIntl, setShowIntl] = useState(false);
   const [showForces, setShowForces] = useState(false);
   const [facDossier, setFacDossier] = useState(null); // ficha da facção rival aberta (id: cs/fd/cv)
+  const [facDossierTab, setFacDossierTab] = useState("perfil"); // aba ativa na ficha: perfil|gerentes
+  const [mgrCard, setMgrCard] = useState(null); // id do gerente do jogador com a ficha aberta
   const [informantFac, setInformantFac] = useState(null); // ficha de informante (polícia) aberta (id: cs/fd/cv)
   const [betrayZone, setBetrayZone] = useState(null); // zona da facção-mãe que o jogador tenta atacar (tutela)
   const [mechTimer, setMechTimer] = useState(null);   // segundos restantes em mecânicas com tempo (timer/memória)
@@ -11383,7 +11407,9 @@ export default function App() {
                       return (
                         <div key={m.id} className="rounded-lg p-2 mb-1.5" style={{ background:C.panel2, border:`1px solid ${C.good}44` }}>
                           <div className="flex items-center justify-between">
-                            <span className="font-mono font-bold text-xs" style={{ color:C.good }}>💼 {m.name}</span>
+                            <button onClick={() => { Audio.play("tap"); setMgrCard(m.id); }} className="pe-btn font-mono font-bold text-xs text-left" style={{ color:C.good, background:"none", border:"none", padding:0, cursor:"pointer" }}>
+                              💼 {m.name} <span style={{ fontSize:8, color:C.mut }}>ficha ▸</span>
+                            </button>
                             <span className="font-mono" style={{ fontSize:8, color:C.mut }}>nv {m.payLevel}/{m.maxPayLevel} · +{Math.round(managerYieldPct(m.payLevel) * 100)}%/zona</span>
                           </div>
                           <div className="flex-1 h-1.5 rounded my-1" style={{ background:C.panel }}>
@@ -11986,7 +12012,7 @@ export default function App() {
                 const vd = g.vendetta && g.vendetta[f];
                 const grudge = vd ? vd.grudge : 0;
                 return (
-                  <button key={f} onClick={() => { Audio.play("tap"); setFacDossier(f); }}
+                  <button key={f} onClick={() => { Audio.play("tap"); setFacDossier(f); setFacDossierTab("perfil"); }}
                     className="pe-btn rounded-lg p-2 flex-1 text-left" style={{ background:C.panel2, border:`2px solid ${grudge >= 30 ? "#C82C2C" : ri.color}` }}>
                     <div className="font-mono text-xs flex items-center justify-between" style={{ color:ri.color }}>
                       <span>{ri.icon} {ri.name}</span>
@@ -12074,6 +12100,63 @@ export default function App() {
           );
         })()}
 
+        {/* === FICHA DO GERENTE DO JOGADOR (foto + nome + ficha) === */}
+        {mgrCard && (() => {
+          const m = (g.managers || []).find(x => x.id === mgrCard);
+          if (!m) return null;
+          const info = playerManagerInfo(m.name) || {};
+          const col = C.good;
+          const zonasNomes = (m.zones || []).map(z => T_NAMES[z]);
+          const rendeTotal = (m.zones || []).reduce((a, z) => a + zoneRevenue(z) * managerYieldPct(m.payLevel), 0);
+          return (
+            <div onClick={() => setMgrCard(null)}
+              style={{ position:"fixed", inset:0, zIndex:96, background:"rgba(2,3,6,0.92)", display:"flex", alignItems:"center", justifyContent:"center", padding:12 }}>
+              <div onClick={e => e.stopPropagation()}
+                style={{ width:"100%", maxWidth:400, maxHeight:"92vh", overflowY:"auto", background:"#0b0e15", border:`2px solid ${col}`, borderRadius:14, boxShadow:`0 0 30px ${col}55` }}>
+                {/* cabeçalho */}
+                <div className="flex items-center justify-between" style={{ padding:"12px 14px 8px", borderBottom:`1px solid ${C.line}` }}>
+                  <span className="font-mono font-bold" style={{ fontSize:12, color:col, letterSpacing:"0.05em" }}>💼 GERENTE DE VENDAS</span>
+                  <button onClick={() => setMgrCard(null)} className="font-mono" style={{ fontSize:18, color:C.mut, background:"none", border:"none", cursor:"pointer", lineHeight:1 }}>✕</button>
+                </div>
+                {/* foto (800×800 recomendado) */}
+                <div style={{ position:"relative", width:"100%", aspectRatio:"1 / 1", background:`linear-gradient(160deg, ${col}22, #05070c)` }}>
+                  <div className="flex flex-col items-center justify-center" style={{ position:"absolute", inset:0, gap:6 }}>
+                    <div style={{ fontSize:72, opacity:0.4 }}>👤</div>
+                    <div className="font-mono" style={{ fontSize:9, color:C.mut, letterSpacing:"0.1em" }}>FOTO DO GERENTE</div>
+                  </div>
+                  {info.photo && <img src={info.photo} alt="" onError={e => { e.target.style.display = "none"; }}
+                    style={{ position:"relative", width:"100%", height:"100%", objectFit:"cover", display:"block" }} />}
+                  <div style={{ position:"absolute", left:0, right:0, bottom:0, padding:"18px 14px 10px",
+                    background:"linear-gradient(to top, rgba(5,7,12,0.95), transparent)" }}>
+                    <div className="font-mono font-bold" style={{ fontSize:18, color:"#fff", lineHeight:1.1 }}>{m.name}</div>
+                    {info.trait && <div className="font-mono" style={{ fontSize:10, color:col }}>{info.trait}</div>}
+                  </div>
+                </div>
+                {/* ficha */}
+                <div style={{ padding:14, display:"flex", flexDirection:"column", gap:8 }}>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${col}33` }}>
+                      <div className="font-mono" style={{ fontSize:8.5, color:C.mut }}>NÍVEL</div>
+                      <div className="font-mono font-bold" style={{ fontSize:13, color:col }}>{m.payLevel}/{m.maxPayLevel} · +{Math.round(managerYieldPct(m.payLevel) * 100)}%</div>
+                    </div>
+                    <div className="rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${col}33` }}>
+                      <div className="font-mono" style={{ fontSize:8.5, color:C.mut }}>RENDE / SEMANA</div>
+                      <div className="font-mono font-bold" style={{ fontSize:13, color:"#5FBF7A" }}>{brMoney(Math.round(rendeTotal))}</div>
+                    </div>
+                  </div>
+                  <div className="rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${col}33` }}>
+                    <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.06em" }}>🗺 ZONAS SOB COMANDO ({zonasNomes.length})</div>
+                    <div className="font-mono" style={{ fontSize:10, color: zonasNomes.length ? C.text : C.mut, marginTop:2, lineHeight:1.4 }}>
+                      {zonasNomes.length ? zonasNomes.join(", ") : "sem zona atribuída — clique na sua zona no mapa"}
+                    </div>
+                  </div>
+                  {info.bio && <div className="font-mono" style={{ fontSize:11, color:C.text, lineHeight:1.5 }}>{info.bio}</div>}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* === FICHA DA FACÇÃO (dossiê: rosto do chefe + símbolo) === */}
         {facDossier && (() => {
           const f = facDossier;
@@ -12103,44 +12186,89 @@ export default function App() {
                   </div>
                   <button onClick={() => setFacDossier(null)} className="font-mono" style={{ fontSize:18, color:C.mut, background:"none", border:"none", cursor:"pointer", lineHeight:1 }}>✕</button>
                 </div>
-                {/* Rosto do chefe (800×800 px recomendado) */}
-                <div style={{ position:"relative", width:"100%", aspectRatio:"1 / 1", background:`linear-gradient(160deg, ${col}22, #05070c)` }}>
-                  <div className="flex flex-col items-center justify-center" style={{ position:"absolute", inset:0, gap:6 }}>
-                    <div style={{ fontSize:72, opacity:0.5 }}>{ri.icon}</div>
-                    <div className="font-mono" style={{ fontSize:9, color:C.mut, letterSpacing:"0.1em" }}>ROSTO DO CHEFE</div>
-                  </div>
-                  <img src={dos.face} alt="" onError={e => { e.target.style.display = "none"; }}
-                    style={{ position:"relative", width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
-                  {/* faixa com o nome do chefe sobre a imagem */}
-                  <div style={{ position:"absolute", left:0, right:0, bottom:0, padding:"18px 14px 10px",
-                    background:"linear-gradient(to top, rgba(5,7,12,0.95), transparent)" }}>
-                    <div className="font-mono font-bold" style={{ fontSize:16, color:"#fff", lineHeight:1.1 }}>{dos.boss}</div>
-                    <div className="font-mono" style={{ fontSize:10, color:col }}>{dos.role}</div>
-                  </div>
+                {/* Abas: PERFIL / GERENTES */}
+                <div className="flex" style={{ borderBottom:`1px solid ${C.line}` }}>
+                  {[["perfil","PERFIL"],["gerentes","GERENTES"]].map(([k, lab]) => (
+                    <button key={k} onClick={() => setFacDossierTab(k)} className="flex-1 py-2 font-mono font-bold"
+                      style={{ fontSize:10, letterSpacing:"0.08em", color: facDossierTab === k ? col : C.mut,
+                        borderBottom: facDossierTab === k ? `2px solid ${col}` : "2px solid transparent" }}>
+                      {lab}
+                    </button>
+                  ))}
                 </div>
-                {/* Informações */}
-                <div style={{ padding:14 }}>
-                  <div className="grid grid-cols-2 gap-2 mb-3">
-                    <div className="rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${C.line}` }}>
-                      <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.08em" }}>OBJETIVO</div>
-                      <div className="font-mono font-bold" style={{ fontSize:11, color:C.text, textTransform:"capitalize" }}>{ri.objective || "—"}</div>
+                {facDossierTab === "perfil" && (
+                  <>
+                    {/* Rosto do chefe (800×800 px recomendado) */}
+                    <div style={{ position:"relative", width:"100%", aspectRatio:"1 / 1", background:`linear-gradient(160deg, ${col}22, #05070c)` }}>
+                      <div className="flex flex-col items-center justify-center" style={{ position:"absolute", inset:0, gap:6 }}>
+                        <div style={{ fontSize:72, opacity:0.5 }}>{ri.icon}</div>
+                        <div className="font-mono" style={{ fontSize:9, color:C.mut, letterSpacing:"0.1em" }}>ROSTO DO CHEFE</div>
+                      </div>
+                      <img src={dos.face} alt="" onError={e => { e.target.style.display = "none"; }}
+                        style={{ position:"relative", width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
+                      {/* faixa com o nome do chefe sobre a imagem */}
+                      <div style={{ position:"absolute", left:0, right:0, bottom:0, padding:"18px 14px 10px",
+                        background:"linear-gradient(to top, rgba(5,7,12,0.95), transparent)" }}>
+                        <div className="font-mono font-bold" style={{ fontSize:16, color:"#fff", lineHeight:1.1 }}>{dos.boss}</div>
+                        <div className="font-mono" style={{ fontSize:10, color:col }}>{dos.role}</div>
+                      </div>
                     </div>
-                    <div className="rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${C.line}` }}>
-                      <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.08em" }}>AMBIÇÃO</div>
-                      <div className="font-mono font-bold" style={{ fontSize:11, color:C.text, textTransform:"capitalize" }}>{ri.ambition || "—"}</div>
+                    {/* Informações */}
+                    <div style={{ padding:14 }}>
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <div className="rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${C.line}` }}>
+                          <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.08em" }}>OBJETIVO</div>
+                          <div className="font-mono font-bold" style={{ fontSize:11, color:C.text, textTransform:"capitalize" }}>{ri.objective || "—"}</div>
+                        </div>
+                        <div className="rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${C.line}` }}>
+                          <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.08em" }}>AMBIÇÃO</div>
+                          <div className="font-mono font-bold" style={{ fontSize:11, color:C.text, textTransform:"capitalize" }}>{ri.ambition || "—"}</div>
+                        </div>
+                        <div className="rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${C.line}` }}>
+                          <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.08em" }}>ATIVIDADE</div>
+                          <div className="font-mono font-bold" style={{ fontSize:11, color: temp >= 0.7 ? "#C82C2C" : temp >= 0.3 ? "#D9822B" : "#4A8A4A" }}>{atividade}</div>
+                        </div>
+                        <div className="rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${C.line}` }}>
+                          <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.08em" }}>RANCOR CONTRA VOCÊ</div>
+                          <div className="font-mono font-bold" style={{ fontSize:11, color: ht.war ? "#C82C2C" : C.text }}>{ht.icon} {ht.label}</div>
+                        </div>
+                      </div>
+                      <div className="font-mono" style={{ fontSize:11, color:C.text, lineHeight:1.5 }}>{dos.lore}</div>
+                      {ri.desc && <div className="font-mono mt-2" style={{ fontSize:9.5, color:C.mut, fontStyle:"italic" }}>{ri.desc}</div>}
                     </div>
-                    <div className="rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${C.line}` }}>
-                      <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.08em" }}>ATIVIDADE</div>
-                      <div className="font-mono font-bold" style={{ fontSize:11, color: temp >= 0.7 ? "#C82C2C" : temp >= 0.3 ? "#D9822B" : "#4A8A4A" }}>{atividade}</div>
+                  </>
+                )}
+                {facDossierTab === "gerentes" && (() => {
+                  const roster = FACTION_MANAGERS[f] || [];
+                  const myZonesIdx = g.terr.map((t, i) => (t.owner === f ? i : -1)).filter(i => i >= 0);
+                  return (
+                    <div style={{ padding:14, display:"flex", flexDirection:"column", gap:8 }}>
+                      <div className="font-mono" style={{ fontSize:9.5, color:C.mut, marginBottom:2 }}>Os 4 gerentes que sustentam a {ri.name} nas ruas.</div>
+                      {roster.map((nome, i) => {
+                        const zonasDele = myZonesIdx.filter(zi => zoneManager(f, zi) === nome);
+                        const foto = managerPhotoOf(nome);
+                        return (
+                          <div key={i} className="rounded-lg p-2 flex gap-3" style={{ background:C.panel2, border:`1px solid ${col}33` }}>
+                            <div style={{ width:64, height:64, flexShrink:0, borderRadius:8, overflow:"hidden", background:"#05070c", position:"relative" }}>
+                              <div className="flex items-center justify-center" style={{ position:"absolute", inset:0, fontSize:26, opacity:0.4 }}>👤</div>
+                              {foto && <img src={foto} alt="" onError={e => { e.target.style.display = "none"; }}
+                                style={{ position:"relative", width:"100%", height:"100%", objectFit:"cover" }} />}
+                            </div>
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <div className="font-mono font-bold" style={{ fontSize:11.5, color:"#fff" }}>{nome}</div>
+                              <div className="font-mono" style={{ fontSize:9, color:col, marginTop:1 }}>
+                                {zonasDele.length} zona{zonasDele.length !== 1 ? "s" : ""} sob comando
+                              </div>
+                              <div className="font-mono" style={{ fontSize:8.5, color:C.mut, marginTop:2, lineHeight:1.4 }}>
+                                {zonasDele.length ? zonasDele.map(zi => T_NAMES[zi]).join(", ") : "sem território ativo no momento"}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="rounded-lg p-2" style={{ background:C.panel2, border:`1px solid ${C.line}` }}>
-                      <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.08em" }}>RANCOR CONTRA VOCÊ</div>
-                      <div className="font-mono font-bold" style={{ fontSize:11, color: ht.war ? "#C82C2C" : C.text }}>{ht.icon} {ht.label}</div>
-                    </div>
-                  </div>
-                  <div className="font-mono" style={{ fontSize:11, color:C.text, lineHeight:1.5 }}>{dos.lore}</div>
-                  {ri.desc && <div className="font-mono mt-2" style={{ fontSize:9.5, color:C.mut, fontStyle:"italic" }}>{ri.desc}</div>}
-                </div>
+                  );
+                })()}
               </div>
             </div>
           );
@@ -12232,10 +12360,19 @@ export default function App() {
                   {lvl >= 3 ? (
                     <div className="rounded-lg p-2" style={{ background:"#0d1119", border:`1px solid ${col}33` }}>
                       <div className="font-mono font-bold" style={{ fontSize:9, color:col, letterSpacing:"0.06em" }}>👑 CHEFE & GERENTES</div>
-                      <div className="font-mono" style={{ fontSize:10, color:C.text, marginTop:3 }}>Chefe: <b style={{ color:col }}>{dos.boss}</b></div>
-                      {intel.gerentes.map((gm, i) => (
-                        <div key={i} className="font-mono" style={{ fontSize:9, color:C.mut }}>• {gm.nome} <span style={{ color:"#5a6478" }}>({T_NAMES[gm.zona]})</span></div>
-                      ))}
+                      <div className="font-mono" style={{ fontSize:10, color:C.text, marginTop:3, marginBottom:4 }}>Chefe: <b style={{ color:col }}>{dos.boss}</b></div>
+                      {intel.gerentes.map((gm, i) => {
+                        const foto = managerPhotoOf(gm.nome);
+                        return (
+                          <div key={i} className="flex items-center gap-1.5 font-mono" style={{ fontSize:9, color:C.mut, marginTop:3 }}>
+                            <div style={{ width:20, height:20, borderRadius:"50%", overflow:"hidden", flexShrink:0, background:"#05070c", position:"relative" }}>
+                              {foto && <img src={foto} alt="" onError={e => { e.target.style.display = "none"; }}
+                                style={{ width:"100%", height:"100%", objectFit:"cover" }} />}
+                            </div>
+                            <span>{gm.nome} <span style={{ color:"#5a6478" }}>({T_NAMES[gm.zona]})</span></span>
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : locked("Um homem de dentro entrega o chefe e os gerentes das áreas.")}
                   {/* Nível 4: próximos alvos */}
@@ -12313,20 +12450,53 @@ export default function App() {
                       {rk.label}
                     </div>
                   </div>
-                  {/* "Polaroid" do gerente da área */}
+                  {/* Cartaz de PROCURADO do gerente da área (quando identificado) */}
+                  {(() => {
+                  const recompensa = Math.max(8, Math.round((intel.movimenta || 0) * 0.8));
+                  return (
                   <div className="flex gap-3 mb-3">
-                    <div style={{ background:"#e8e4d8", borderRadius:3, padding:"6px 6px 14px", transform:"rotate(-3deg)", flexShrink:0, boxShadow:"2px 3px 8px #00000066" }}>
-                      <div className="flex items-center justify-center" style={{ width:64, height:64, background:"#232a38", fontSize:34 }}>{intel.owner === "nt" ? "❓" : "🕵🏽"}</div>
-                      <div className="font-mono text-center" style={{ fontSize:6.5, color:"#333", marginTop:4 }}>GERENTE DA ÁREA</div>
-                    </div>
+                    {nivel >= 1 ? (() => {
+                      const foto = managerPhotoOf(intel.gerente);
+                      return (
+                        <div style={{ position:"relative", width:76, flexShrink:0 }}>
+                          <div style={{
+                            background:"#e8e4d8", padding:"5px 5px 6px", boxShadow:"2px 4px 10px #00000077",
+                            transform:"rotate(-3deg)",
+                            clipPath:"polygon(2% 3%,18% 0%,42% 2%,68% 0%,88% 2%,100% 5%,98% 22%,100% 42%,97% 62%,100% 82%,96% 98%,78% 100%,55% 97%,30% 100%,8% 98%,0% 88%,3% 65%,0% 40%,2% 18%)",
+                          }}>
+                            <div style={{ position:"relative", width:66, height:78, background:"#232a38", overflow:"hidden" }}>
+                              <div className="flex items-center justify-center" style={{ position:"absolute", inset:0, fontSize:30 }}>👤</div>
+                              {foto && <img src={foto} alt="" onError={e => { e.target.style.display = "none"; }}
+                                style={{ position:"relative", width:"100%", height:"100%", objectFit:"cover", filter:"grayscale(0.75) sepia(0.4) contrast(1.15)" }} />}
+                              {/* faixa PROCURADO diagonal */}
+                              <div style={{ position:"absolute", left:"-18%", right:"-18%", top:"38%", background:"#8a1414", color:"#f5e6c8",
+                                transform:"rotate(-14deg)", textAlign:"center", padding:"1.5px 0", boxShadow:"0 1px 4px #00000088", border:"1px solid #3a0808" }}>
+                                <span className="font-mono font-bold" style={{ fontSize:8, letterSpacing:"0.12em" }}>PROCURADO</span>
+                              </div>
+                            </div>
+                            <div className="font-mono text-center" style={{ fontSize:6, color:"#2a2620", marginTop:3, letterSpacing:"0.04em" }}>GERENTE DA ÁREA</div>
+                          </div>
+                        </div>
+                      );
+                    })() : (
+                      <div style={{ background:"#e8e4d8", borderRadius:3, padding:"6px 6px 14px", transform:"rotate(-3deg)", flexShrink:0, boxShadow:"2px 3px 8px #00000066" }}>
+                        <div className="flex items-center justify-center" style={{ width:64, height:64, background:"#232a38", fontSize:34 }}>{intel.owner === "nt" ? "❓" : "🕵🏽"}</div>
+                        <div className="font-mono text-center" style={{ fontSize:6.5, color:"#333", marginTop:4 }}>GERENTE DA ÁREA</div>
+                      </div>
+                    )}
                     <div style={{ flex:1, minWidth:0 }}>
                       <div className="font-mono" style={{ fontSize:8.5, color:C.mut, letterSpacing:"0.1em" }}>GERENTE IDENTIFICADO</div>
-                      <div className="font-mono font-bold" style={{ fontSize:12, color: nivel >= 1 ? "#e8d9a0" : C.mut, lineHeight:1.3, marginTop:2 }}>
+                      <div className="font-mono font-bold" style={{ fontSize:12.5, color: nivel >= 1 ? "#e8d9a0" : C.mut, lineHeight:1.3, marginTop:2, letterSpacing: nivel >= 1 ? "0.06em" : "normal" }}>
                         {nivel >= 1 ? intel.gerente : "não identificado — aprofunde a investigação"}
                       </div>
+                      {nivel >= 1 && (
+                        <div className="font-mono font-bold mt-1" style={{ fontSize:9.5, color:"#D9642C" }}>💰 RECOMPENSA: {brMoney(recompensa)}</div>
+                      )}
                       <div className="font-mono mt-1" style={{ fontSize:8.5, color:C.mut }}>Fonte: {dos.score >= 100 ? "escutas + infiltrado" : dos.score >= 50 ? "informantes de rua" : "observação externa"}</div>
                     </div>
                   </div>
+                  );
+                  })()}
                   {/* Dados levantados */}
                   <div className="rounded p-2.5 mb-3" style={{ background:"#101623", border:"1px solid #26314a" }}>
                     {linha("EFETIVO NA ÁREA", fuzz(intel.soldados) + " soldados", "#e0e6f0")}
