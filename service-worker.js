@@ -1,5 +1,5 @@
 // TRONOS — Service Worker (cache para jogo offline)
-const CACHE = "tronos-v94-gerentes-jogador";
+const CACHE = "tronos-v96-arsenal-fotos-2";
 const CORE = [
   "./index.html",
   "./manifest.json",
@@ -31,6 +31,18 @@ const CORE = [
   "./assets/faccoes/pjger_2.jpg",
   "./assets/faccoes/pjger_3.jpg",
   "./assets/faccoes/pjger_4.jpg",
+  "./assets/arsenal/p1.png",
+  "./assets/arsenal/p2.png",
+  "./assets/arsenal/p3.png",
+  "./assets/arsenal/p4.png",
+  "./assets/arsenal/r1.png",
+  "./assets/arsenal/r2.png",
+  "./assets/arsenal/r3.png",
+  "./assets/arsenal/r4.png",
+  "./assets/arsenal/m1.png",
+  "./assets/arsenal/m2.png",
+  "./assets/arsenal/m3.png",
+  "./assets/arsenal/m4.png",
   "https://unpkg.com/react@18/umd/react.production.min.js",
   "https://unpkg.com/react-dom@18/umd/react-dom.production.min.js",
   "https://cdn.tailwindcss.com",

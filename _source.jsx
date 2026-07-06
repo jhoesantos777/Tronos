@@ -3743,22 +3743,22 @@ const WEAPON_ICONS = {
 // slot: pistol | rifle | smg | vest | vehicle
 const EQUIP_CATALOG = {
   pistol: [
-    { id:"p1", name:"Compacta M1",     icon:"🔫", rarity:"comum",    cost:15,  atk:0.03, desc:"Pistola básica de serviço. Confiável nas primeiras ruas de Porto Esperança." },
-    { id:"p2", name:"Defender P2",     icon:"🔫", rarity:"incomum",  cost:50,  atk:0.07, desc:"Modelo aprimorado com mira melhorada. Padrão das operações intermediárias." },
-    { id:"p3", name:"Specter S3",      icon:"🔫", rarity:"rara",     cost:130, atk:0.12, desc:"Pistola de alta precisão. Usada pelas forças de elite do Estado." },
-    { id:"p4", name:"Imperium X4",     icon:"🔫", rarity:"épica",    cost:260, atk:0.18, desc:"A arma pessoal dos comandantes. Fabricada em Porto Esperança para Porto Esperança." },
+    { id:"p1", name:"Compacta M1",     icon:"🔫", photo:"assets/arsenal/p1.png", rarity:"comum",    cost:15,  atk:0.03, desc:"Pistola básica de serviço. Confiável nas primeiras ruas de Porto Esperança." },
+    { id:"p2", name:"Defender P2",     icon:"🔫", photo:"assets/arsenal/p2.png", rarity:"incomum",  cost:50,  atk:0.07, desc:"Modelo aprimorado com mira melhorada. Padrão das operações intermediárias." },
+    { id:"p3", name:"Specter S3",      icon:"🔫", photo:"assets/arsenal/p3.png", rarity:"rara",     cost:130, atk:0.12, desc:"Pistola de alta precisão. Usada pelas forças de elite do Estado." },
+    { id:"p4", name:"Imperium X4",     icon:"🔫", photo:"assets/arsenal/p4.png", rarity:"épica",    cost:260, atk:0.18, desc:"A arma pessoal dos comandantes. Fabricada em Porto Esperança para Porto Esperança." },
   ],
   rifle: [
-    { id:"r1", name:"Guardian R1",    icon:"🎯", rarity:"incomum",  cost:80,  atk:0.07, desc:"Fuzil de assalto padrão. Versátil e resistente nas favelas e becos." },
-    { id:"r2", name:"Titan R2",       icon:"🎯", rarity:"rara",     cost:200, atk:0.14, desc:"Versão aprimorada com carregador estendido. Preferido em operações noturnas." },
-    { id:"r3", name:"Vórtex R3",      icon:"🎯", rarity:"épica",    cost:380, atk:0.22, desc:"Fuzil de precisão com supressor integrado. Operações de alto risco." },
-    { id:"r4", name:"Nemesis R4",     icon:"🎯", rarity:"lendária", cost:650, atk:0.30, desc:"O fuzil que controla territórios. Exclusivo das forças mais poderosas da cidade." },
+    { id:"r1", name:"Guardian R1",    icon:"🎯", photo:"assets/arsenal/r1.png", rarity:"incomum",  cost:80,  atk:0.07, desc:"Fuzil de assalto padrão. Versátil e resistente nas favelas e becos." },
+    { id:"r2", name:"Titan R2",       icon:"🎯", photo:"assets/arsenal/r2.png", rarity:"rara",     cost:200, atk:0.14, desc:"Versão aprimorada com carregador estendido. Preferido em operações noturnas." },
+    { id:"r3", name:"Vórtex R3",      icon:"🎯", photo:"assets/arsenal/r3.png", rarity:"épica",    cost:380, atk:0.22, desc:"Fuzil de precisão com supressor integrado. Operações de alto risco." },
+    { id:"r4", name:"Nemesis R4",     icon:"🎯", photo:"assets/arsenal/r4.png", rarity:"lendária", cost:650, atk:0.30, desc:"O fuzil que controla territórios. Exclusivo das forças mais poderosas da cidade." },
   ],
   smg: [
-    { id:"m1", name:"Tempest M1",     icon:"💥", rarity:"rara",     cost:150, atk:0.09, desc:"Metralhadora compacta de alta cadência. Devastadora em espaços fechados." },
-    { id:"m2", name:"Kraken M2",      icon:"💥", rarity:"épica",    cost:320, atk:0.16, desc:"Sistema de rajada longa. Domina linhas de confronto abertas." },
-    { id:"m3", name:"Golem M3",       icon:"💥", rarity:"épica",    cost:560, atk:0.23, desc:"Plataforma de fogo coletivo. Transforma qualquer posição em fortim." },
-    { id:"m4", name:"Leviatã M4",     icon:"💥", rarity:"lendária", cost:950, atk:0.32, desc:"Poder de supressão absoluto. Quem enfrentar vai recuar — ou não vai andar." },
+    { id:"m1", name:"Tempest M1",     icon:"💥", photo:"assets/arsenal/m1.png", rarity:"rara",     cost:150, atk:0.09, desc:"Metralhadora compacta de alta cadência. Devastadora em espaços fechados." },
+    { id:"m2", name:"Kraken M2",      icon:"💥", photo:"assets/arsenal/m2.png", rarity:"épica",    cost:320, atk:0.16, desc:"Sistema de rajada longa. Domina linhas de confronto abertas." },
+    { id:"m3", name:"Golem M3",       icon:"💥", photo:"assets/arsenal/m3.png", rarity:"épica",    cost:560, atk:0.23, desc:"Plataforma de fogo coletivo. Transforma qualquer posição em fortim." },
+    { id:"m4", name:"Leviatã M4",     icon:"💥", photo:"assets/arsenal/m4.png", rarity:"lendária", cost:950, atk:0.32, desc:"Poder de supressão absoluto. Quem enfrentar vai recuar — ou não vai andar." },
   ],
   vest: [
     { id:"v1", name:"Colete CV1",          icon:"🛡", rarity:"comum",    cost:20,  def:0.05, desc:"Proteção básica contra munição leve. Padrão das patrulhas de Porto Esperança." },
@@ -8560,7 +8560,11 @@ export default function App() {
             <div className="flex flex-col gap-2">
               {(EQUIP_CATALOG[slot.key] || []).map(item => (
                 <div key={item.id} className="rounded-lg p-3 flex items-start gap-3" style={{ background:C.panel, border:`1px solid ${C.line}` }}>
-                  <span style={{ fontSize:22, flexShrink:0 }}>{item.icon}</span>
+                  <span style={{ position:"relative", width:56, height:56, flexShrink:0, display:"inline-flex", alignItems:"center", justifyContent:"center" }}>
+                    {item.photo && <img src={item.photo} alt="" style={{ width:"100%", height:"100%", objectFit:"contain", filter:"drop-shadow(0 1px 3px rgba(0,0,0,.6))" }}
+                      onError={e => { e.target.style.display = "none"; e.target.nextElementSibling.style.display = "inline"; }} />}
+                    <span style={{ fontSize:22, display: item.photo ? "none" : "inline" }}>{item.icon}</span>
+                  </span>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <div className="font-mono font-bold" style={{ fontSize:12 }}>{item.name}</div>
@@ -11222,7 +11226,11 @@ export default function App() {
                               return (
                                 <div key={item.id} className="flex items-start gap-2 px-2 py-2"
                                   style={{ borderTop:`1px solid ${C.line}`, background: equipped ? "#0d1a10" : "transparent" }}>
-                                  <span style={{ fontSize:16, flexShrink:0 }}>{item.icon}</span>
+                                  <span style={{ position:"relative", width:44, height:44, flexShrink:0, display:"inline-flex", alignItems:"center", justifyContent:"center" }}>
+                                    {item.photo && <img src={item.photo} alt="" style={{ width:"100%", height:"100%", objectFit:"contain", filter:"drop-shadow(0 1px 3px rgba(0,0,0,.6))" }}
+                                      onError={e => { e.target.style.display = "none"; e.target.nextElementSibling.style.display = "inline"; }} />}
+                                    <span style={{ fontSize:16, display: item.photo ? "none" : "inline" }}>{item.icon}</span>
+                                  </span>
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       <span className="font-mono font-bold" style={{ fontSize:10 }}>{item.name}</span>
