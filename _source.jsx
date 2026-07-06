@@ -5002,6 +5002,15 @@ export default function App() {
   const [mapOff, setMapOff] = useState({ x: 0, y: 0 });
   const mapPan = useRef(null);
   const mapView = `${mapOff.x} ${mapOff.y} ${MAP_W / mapZoom} ${MAP_H / mapZoom}`;
+  // Mapa expandido: em tela vertical (retrato) o mapa gira 90° para ocupar a tela inteira
+  const [vp, setVp] = useState({ w: window.innerWidth, h: window.innerHeight });
+  useEffect(() => {
+    const f = () => setVp({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener("resize", f);
+    window.addEventListener("orientationchange", f);
+    return () => { window.removeEventListener("resize", f); window.removeEventListener("orientationchange", f); };
+  }, []);
+  const mapRot = mapFull && vp.h > vp.w;
   const [opComp, setOpComp] = useState({ b:0, a:0, d:0, e:0 });
   // === CONFRONTO TÁTICO (cinematográfico) === estado do modal
   const [confronto, setConfronto] = useState(null);
@@ -9843,9 +9852,13 @@ export default function App() {
                   ? { position:"fixed", inset:0, zIndex:70, background:"#06080c", overflow:"hidden", touchAction:"none" }
                   : { position:"relative", overflow:"hidden", borderRadius:8, touchAction:"none" }}
                 onWheel={(e) => { e.preventDefault(); const d = e.deltaY < 0 ? 1.2 : 0.83; setMapZoom(z => clamp(z * d, 1, 8)); }}>
+                {/* wrapper de rotação: em tela vertical o mapa gira 90° e ocupa a tela toda (vire o celular de lado) */}
+                <div style={mapRot
+                    ? { position:"absolute", top:0, left:0, width:"100vh", height:"100vw", transform:"rotate(90deg) translateY(-100%)", transformOrigin:"top left" }
+                    : mapFull ? { position:"relative", width:"100%", height:"100%" } : { position:"relative" }}>
                 <svg viewBox={mapView} className="w-full" style={{ background:"#0a1420", display:"block", height: mapFull ? "100%" : "auto", cursor: mapZoom > 1 ? "grab" : "pointer" }}
                   onPointerDown={(e) => { if (mapZoom > 1) { mapPan.current = { x: e.clientX, y: e.clientY, ox: mapOff.x, oy: mapOff.y, dragging: true }; } }}
-                  onPointerMove={(e) => { const p = mapPan.current; if (p && p.dragging) { const dx = (e.clientX - p.x) * (MAP_W / mapZoom / 360); const dy = (e.clientY - p.y) * (MAP_W / mapZoom / 360); setMapOff({ x: clamp(p.ox - dx, 0, MAP_W - MAP_W / mapZoom), y: clamp(p.oy - dy, 0, MAP_H - MAP_H / mapZoom) }); } }}
+                  onPointerMove={(e) => { const p = mapPan.current; if (p && p.dragging) { const sx = e.clientX - p.x, sy = e.clientY - p.y; const k = MAP_W / mapZoom / (mapFull ? (mapRot ? vp.h : vp.w) : 360); const dx = (mapRot ? sy : sx) * k; const dy = (mapRot ? -sx : sy) * k; setMapOff({ x: clamp(p.ox - dx, 0, MAP_W - MAP_W / mapZoom), y: clamp(p.oy - dy, 0, MAP_H - MAP_H / mapZoom) }); } }}
                   onPointerUp={() => { if (mapPan.current) mapPan.current.dragging = false; }}
                   onPointerLeave={() => { if (mapPan.current) mapPan.current.dragging = false; }}>
                   <defs>
@@ -9982,6 +9995,10 @@ export default function App() {
                   </div>
                 )}
                 {mapZoom > 1 && <div style={{ position:"absolute", left:8, top: mapFull ? 44 : 8, zIndex:3, fontFamily:"monospace", fontSize:9, color:"#fff", background:"rgba(0,0,0,0.6)", padding:"2px 8px", borderRadius:6 }}>{Math.round(mapZoom * 100)}% · arraste para mover</div>}
+                {mapRot && (
+                  <div className="font-mono" style={{ position:"absolute", left:"50%", bottom:46, transform:"translateX(-50%)", zIndex:3, fontSize:10, color:"#D9B25F", background:"rgba(0,0,0,0.65)", padding:"4px 10px", borderRadius:8, border:`1px solid ${C.line}`, whiteSpace:"nowrap" }}>📱 vire o celular de lado</div>
+                )}
+                </div>
               </div>
 
               {sel != null && (

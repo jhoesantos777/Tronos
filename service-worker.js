@@ -1,5 +1,5 @@
 // TRONOS — Service Worker (cache para jogo offline)
-const CACHE = "tronos-v97-teatro-batalha";
+const CACHE = "tronos-v98-mapa-tela-cheia";
 const CORE = [
   "./index.html",
   "./manifest.json",
