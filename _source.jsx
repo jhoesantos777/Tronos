@@ -1258,6 +1258,117 @@ function calcularConfrontoTatico(atacante, defensor, tatica, territorio, cmdBonu
     ratio,
   };
 }
+// ============ TEATRO DE BATALHA (combate de campo com posicionamento) ============
+// O polígono real da zona vira o campo. 3 setores: left / center / right.
+const BATTLE_SECTORS = ["left", "center", "right"];
+const SECTOR_LABEL = { left:"FLANCO ESQ", center:"CENTRO", right:"FLANCO DIR" };
+// Normaliza o polígono da zona para um viewBox local (0..W, 0..H) com margem.
+function normalizeZonePoly(zone, W = 100, H = 72, pad = 6) {
+  const pts = cellPoly(zone);
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const sw = (W - pad * 2) / Math.max(1, maxX - minX);
+  const sh = (H - pad * 2) / Math.max(1, maxY - minY);
+  const s = Math.min(sw, sh);
+  const ox = (W - (maxX - minX) * s) / 2, oy = (H - (maxY - minY) * s) / 2;
+  return pts.map(p => ({ x: ox + (p.x - minX) * s, y: oy + (p.y - minY) * s }));
+}
+// Gera a distribuição do DEFENSOR pelos 3 setores — determinística por zona+turno,
+// com perfil tático por dono (agressiva concentra, caótica flanqueia...).
+function genEnemyDeploy(owner, defensor, zone, turn) {
+  const seed = (zone * 31 + turn * 7) % 997;
+  const r = n => ((seed * (n + 3) * 2654435761) >>> 8) % 1000 / 1000; // pseudo-rand determinístico
+  let weights;
+  if (owner === "cs") weights = [0.25, 0.50, 0.25];        // Serpente: centro forte
+  else if (owner === "fd") weights = [0.35, 0.35, 0.30];   // Falange: equilibrada
+  else if (owner === "cv") weights = [0.40, 0.20, 0.40];   // Corvos: flancos pesados
+  else if (owner === "pl") weights = [0.30, 0.40, 0.30];   // Polícia: centro protegido
+  else {
+    // neutra/fraca: distribuição irregular, pode deixar um setor quase vazio
+    const a = 0.15 + r(1) * 0.45, b = 0.1 + r(2) * 0.4;
+    weights = [a, b, Math.max(0.05, 1 - a - b)];
+  }
+  // pequeno embaralhamento determinístico (±10%) para não ficar previsível demais
+  const jitter = weights.map((w, i) => Math.max(0.03, w + (r(i + 4) - 0.5) * 0.2));
+  const tot = jitter.reduce((a, b) => a + b, 0);
+  const norm = jitter.map(w => w / tot);
+  // distribuir as unidades do defensor pelos setores conforme os pesos
+  const deploy = { left: [], center: [], right: [] };
+  (defensor.unidades || []).forEach(u => {
+    let rest = u.qtd || 0;
+    BATTLE_SECTORS.forEach((sec, i) => {
+      const q = i === 2 ? rest : Math.round((u.qtd || 0) * norm[i]);
+      const take = Math.min(rest, q);
+      if (take > 0) deploy[sec].push({ ...u, qtd: take });
+      rest -= take;
+    });
+  });
+  return { deploy, weights: norm };
+}
+// Força de um lado do deploy num setor (Σ atk×qtd relativo ao total do exército)
+function sectorWeight(dep, sec) {
+  const all = BATTLE_SECTORS.reduce((s, k) => s + (dep[k] || []).reduce((a, u) => a + (u.forca || u.atk || 1) * (u.qtd || 0), 0), 0) || 1;
+  const mine = (dep[sec] || []).reduce((a, u) => a + (u.forca || u.atk || 1) * (u.qtd || 0), 0);
+  return mine / all;
+}
+function sectorCount(dep, sec) { return (dep[sec] || []).reduce((a, u) => a + (u.qtd || 0), 0); }
+// Resolve a batalha por setores. Envolve a matemática do confronto único:
+// as forças globais (pré-computadas com equip/moral/postura/dossiê) são divididas
+// pelos setores conforme o posicionamento; modificadores posicionais têm teto de ±15%.
+function resolverBatalhaCampo(atacante, defensor, deploy, enemyDeploy, tatica, cmdBonus = {}, arsenalMods = {}) {
+  const am = arsenalMods || {};
+  let forcaAtacante = atacante.forcaTotal || calcularForcaTotal(atacante.unidades);
+  let forcaDefensor = (defensor.forcaTotal != null) ? defensor.forcaTotal : calcularForcaTotal(defensor.unidades);
+  // táticas e bônus — idênticos ao modelo único
+  if (tatica === "frontal") forcaAtacante *= (forcaAtacante > forcaDefensor ? 1.2 : 1.0) * (am.frontal || 1);
+  if (tatica === "emboscada") forcaAtacante *= 1.1 * (am.emboscada || 1);
+  if (tatica === "reforco") { forcaAtacante *= 0.95; forcaDefensor *= 0.82; }
+  if (tatica === "recuo") {
+    return { resultado:"recuo", baixasAtacante: Math.round(calcularBaixasRecuo() * (am.recuoLoss != null ? am.recuoLoss : 1)), baixasDefensor: 0, ratio: forcaAtacante / (forcaDefensor || 1), sectors: [] };
+  }
+  if (cmdBonus.atk) forcaAtacante *= (1 + cmdBonus.atk);
+  if (cmdBonus.def) forcaDefensor *= (1 + cmdBonus.def);
+  // pesos posicionais de cada lado
+  const myW = BATTLE_SECTORS.map(sec => sectorWeight(deploy, sec));
+  const enW = BATTLE_SECTORS.map(sec => sectorWeight(enemyDeploy, sec));
+  const sectors = [];
+  let wins = 0, weightedRatio = 0, weightSum = 0;
+  BATTLE_SECTORS.forEach((sec, i) => {
+    const myCount = sectorCount(deploy, sec);
+    const enCount = sectorCount(enemyDeploy, sec);
+    let atkS = forcaAtacante * myW[i];
+    let defS = Math.max(0.5, forcaDefensor * enW[i]);
+    let flank = false, mod = 1;
+    // FLANQUEIO: setor inimigo (quase) vazio e você presente → toma o setor
+    if (myCount > 0 && (enCount === 0 || enW[i] < 0.15 * Math.max(...enW, 0.01))) flank = true;
+    // CONCENTRAÇÃO: frontal com >50% da força no setor · EMBOSCADA: bônus nos flancos
+    if (tatica === "frontal" && myW[i] > 0.5) mod *= 1.10;
+    if (tatica === "emboscada" && sec !== "center") mod *= 1.10;
+    mod = Math.min(1.15, Math.max(0.85, mod));
+    atkS *= mod * (0.88 + Math.random() * 0.24); // sorte ±12% por setor
+    const ratioS = myCount === 0 ? 0 : (flank ? 99 : atkS / defS);
+    const win = myCount > 0 && (flank || ratioS > 1.1);
+    const lost = myCount === 0 || (!flank && ratioS < 0.8);
+    if (win) wins++;
+    const w = Math.max(myW[i], enW[i], 0.05);
+    weightedRatio += Math.min(3, ratioS) * w; weightSum += w;
+    sectors.push({ id: sec, win, lost, ratioS, atkS: Math.round(atkS * 10) / 10, defS: Math.round(defS * 10) / 10, flank, myCount, enCount });
+    // envolvimento: flanqueio dá +10% nos setores seguintes
+    if (flank) forcaAtacante *= 1.10;
+  });
+  const ratio = weightSum ? weightedRatio / weightSum : 0;
+  const resultado = wins >= 2 ? "vitoria" : wins === 1 ? "empate" : "derrota";
+  let baixasA = calcularBaixas(atacante.unidades, resultado, tatica);
+  if (tatica === "reforco" && am.reforco) baixasA = Math.round(baixasA / am.reforco);
+  return {
+    resultado,
+    baixasAtacante: baixasA,
+    baixasDefensor: calcularBaixas(defensor.unidades, resultado === "vitoria" ? "derrota" : resultado === "derrota" ? "vitoria" : "empate", null),
+    ratio,
+    sectors,
+  };
+}
 function narrativaConfronto(atacanteId, defensorId, resultado, policeForceType) {
   const envolvePolicia = atacanteId === "pl" || defensorId === "pl";
   const poolKey = envolvePolicia ? "com_policia" : "entre_faccoes";
@@ -4894,29 +5005,35 @@ export default function App() {
   const [opComp, setOpComp] = useState({ b:0, a:0, d:0, e:0 });
   // === CONFRONTO TÁTICO (cinematográfico) === estado do modal
   const [confronto, setConfronto] = useState(null);
-  const [cfFase, setCfFase] = useState("briefing");
+  const [cfFase, setCfFase] = useState("posicionar"); // teatro de batalha: posicionar | batalha | resultado
   const [cfTatica, setCfTatica] = useState(null);
   const [cfRes, setCfRes] = useState(null);
   const [cfLog, setCfLog] = useState([]);
   const [cfPoliceForce, setCfPoliceForce] = useState(null); // V4.2: força policial escolhida
   const [cfProg, setCfProg] = useState(0);
   const cfTimers = useRef([]);
+  // Teatro de batalha: posicionamento por setor (left/center/right)
+  const [cfDeploy, setCfDeploy] = useState({ left:{}, center:{}, right:{} });   // { sec: { b:qtd, a:qtd, ... } }
+  const [cfEnemyDeploy, setCfEnemyDeploy] = useState(null);                     // { deploy:{left:[unidades]}, weights }
+  const [cfSector, setCfSector] = useState(-1);                                 // setor em resolução na animação (-1 = nenhum)
+  // TEATRO DE BATALHA: a animação resolve os 3 setores em sequência (~3s cada) e fecha no resultado.
   useEffect(() => {
-    if (cfFase !== "animando" || !cfRes) return;
+    if (cfFase !== "batalha" || !cfRes) return;
     cfTimers.current.forEach(id => clearTimeout(id)); cfTimers.current = [];
-    setCfLog([]); setCfProg(0);
+    setCfLog([]); setCfProg(0); setCfSector(-1);
     const narr = cfRes.narr || {};
     const T = cfTimers.current;
-    T.push(setTimeout(() => setCfLog(L => [...L, narr.onda1]), 300));
-    T.push(setTimeout(() => setCfLog(L => [...L, narr.onda2]), 4000));
-    T.push(setTimeout(() => setCfLog(L => [...L, narr.onda3]), 8000));
+    const SECT_MS = 3000, TOTAL = SECT_MS * 3 + 800;
+    T.push(setTimeout(() => { setCfSector(0); setCfLog(L => [...L, narr.onda1]); Audio.play("battle"); }, 300));
+    T.push(setTimeout(() => { setCfSector(1); setCfLog(L => [...L, narr.onda2]); Audio.play("battle"); }, 300 + SECT_MS));
+    T.push(setTimeout(() => { setCfSector(2); setCfLog(L => [...L, narr.onda3]); Audio.play("battle"); }, 300 + SECT_MS * 2));
     const start = Date.now();
     const iv = setInterval(() => {
-      const p = Math.min(100, ((Date.now() - start) / 12000) * 100);
+      const p = Math.min(100, ((Date.now() - start) / TOTAL) * 100);
       setCfProg(p);
       if (p >= 100) clearInterval(iv);
     }, 90);
-    T.push(setTimeout(() => { clearInterval(iv); setCfProg(100); setCfFase("resultado"); }, 12000));
+    T.push(setTimeout(() => { clearInterval(iv); setCfProg(100); setCfSector(3); setCfFase("resultado"); Audio.play(cfRes.resultado === "vitoria" ? "conquer" : cfRes.resultado === "derrota" ? "lose" : "alert"); }, TOTAL));
     return () => { T.forEach(id => clearTimeout(id)); clearInterval(iv); };
   }, [cfFase, cfRes]);
   const [invDraft, setInvDraft] = useState([]);
@@ -6830,7 +6947,11 @@ export default function App() {
     const arsenalMods = arsenalStrategyMods();
 
     setConfronto({ atacante, defensor, territorio: { dono: t.owner, nome: T_NAMES[zone] }, zone, aditivos, arsenalMods });
-    setCfFase("briefing"); setCfTatica(null); setCfRes(null); setCfLog([]); setCfProg(0);
+    // Teatro de batalha: gerar posicionamento do defensor e abrir na fase de posicionamento
+    setCfEnemyDeploy(genEnemyDeploy(t.owner, defensor, zone, g.turn));
+    setCfDeploy({ left:{}, center:{}, right:{} });
+    setCfSector(-1);
+    setCfFase("posicionar"); setCfTatica(null); setCfRes(null); setCfLog([]); setCfProg(0);
     Audio.play("tap");
   }
   function confirmarForçaPolicial(forceType) {
@@ -6872,7 +6993,9 @@ export default function App() {
 
     setConfronto({ ...confronto, atacante, defensor });
     setCfPoliceForce(forceType);
-    setCfFase("briefing"); setCfTatica(null); setCfRes(null); setCfLog([]); setCfProg(0);
+    setCfEnemyDeploy(genEnemyDeploy(t.owner, defensor, confronto.zone, g.turn));
+    setCfDeploy({ left:{}, center:{}, right:{} });
+    setCfFase("posicionar"); setCfTatica(null); setCfRes(null); setCfLog([]); setCfProg(0);
   }
 
   function escolherTatica(tatica) {
@@ -6897,12 +7020,33 @@ export default function App() {
         cmdBonus.atk = (cmdBonus.atk || 0) + 0.15;
       }
     }
-    const res = calcularConfrontoTatico(confronto.atacante, confronto.defensor, tatica, confronto.territorio, cmdBonus, confronto.arsenalMods || {});
+    // TEATRO DE BATALHA: converter a alocação por tipo (cfDeploy) para unidades por setor
+    const unidadeDe = {};
+    (confronto.atacante.unidades || []).forEach(u => { unidadeDe[u.id] = u; });
+    const totalAlocado = BATTLE_SECTORS.reduce((s2, sec) => s2 + Object.values(cfDeploy[sec] || {}).reduce((a, b) => a + b, 0), 0);
+    let deployUnits = { left: [], center: [], right: [] };
+    if (totalAlocado < 1) {
+      // fallback: distribuir tudo igualmente pelos 3 setores
+      (confronto.atacante.unidades || []).forEach(u => {
+        const base = Math.floor((u.qtd || 0) / 3), resto = (u.qtd || 0) - base * 2;
+        [base, base, resto].forEach((q, i) => { if (q > 0) deployUnits[BATTLE_SECTORS[i]].push({ ...u, qtd: q }); });
+      });
+    } else {
+      BATTLE_SECTORS.forEach(sec => {
+        for (const [k, q] of Object.entries(cfDeploy[sec] || {})) {
+          if (q > 0 && unidadeDe[k]) deployUnits[sec].push({ ...unidadeDe[k], qtd: q });
+        }
+      });
+    }
+    const enemyDep = (cfEnemyDeploy && cfEnemyDeploy.deploy) || { left: [], center: [], right: [] };
+    const res = tatica === "recuo"
+      ? calcularConfrontoTatico(confronto.atacante, confronto.defensor, tatica, confronto.territorio, cmdBonus, confronto.arsenalMods || {})
+      : resolverBatalhaCampo(confronto.atacante, confronto.defensor, deployUnits, enemyDep, tatica, cmdBonus, confronto.arsenalMods || {});
     const narr = narrativaConfronto(confronto.atacante.id, confronto.defensor.id, res.resultado === "recuo" ? "derrota" : res.resultado, cfPoliceForce);
     setCfTatica(tatica);
-    setCfRes({ ...res, narr });
-    setCfLog([]); setCfProg(0);
-    setCfFase("animando");
+    setCfRes({ ...res, narr, deployUnits });
+    setCfLog([]); setCfProg(0); setCfSector(-1);
+    setCfFase(tatica === "recuo" ? "resultado" : "batalha");
   }
   function aplicarConfronto() {
     cfTimers.current.forEach(id => clearTimeout(id)); cfTimers.current = [];
@@ -6945,7 +7089,8 @@ export default function App() {
         return s;
       });
     }
-    setConfronto(null); setCfFase("briefing"); setCfTatica(null); setCfRes(null); setCfLog([]); setCfProg(0);
+    setConfronto(null); setCfFase("posicionar"); setCfTatica(null); setCfRes(null); setCfLog([]); setCfProg(0);
+    setCfDeploy({ left:{}, center:{}, right:{} }); setCfEnemyDeploy(null); setCfSector(-1);
     setOpComp({ b:0, a:0, d:0, e:0 }); setOpNade(null); setOpStance(null); setOpForce(null);
     setSel(null);
   }
@@ -12558,8 +12703,175 @@ export default function App() {
           return (
             <div style={{ position:"fixed", inset:0, zIndex:90, background:"rgba(2,3,6,0.92)", display:"flex", alignItems:"center", justifyContent:"center", padding:12 }}>
               <style>{".cf-fadein{animation:cfFade .5s ease}@keyframes cfFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}"}</style>
-              <div style={{ width:"100%", maxWidth:440, maxHeight:"92vh", overflowY:"auto", background:"#0b0e15", border:`2px solid ${cfFase==="briefing" ? bordaCor : "#222"}`, borderRadius:14, boxShadow:`0 0 30px ${bordaCor}55` }}>
-                {cfFase === "briefing" && A && D && (
+              <div style={{ width:"100%", maxWidth:440, maxHeight:"92vh", overflowY:"auto", background:"#0b0e15", border:`2px solid ${cfFase==="posicionar" ? bordaCor : "#222"}`, borderRadius:14, boxShadow:`0 0 30px ${bordaCor}55` }}>
+                {/* ===== TEATRO DE BATALHA: FASE POSICIONAR ===== */}
+                {cfFase === "posicionar" && A && D && (() => {
+                  const zone = confronto.zone;
+                  const poly = normalizeZonePoly(zone);
+                  const polyPts = poly.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+                  const enemyDep = (cfEnemyDeploy && cfEnemyDeploy.deploy) || { left:[], center:[], right:[] };
+                  const hasIntel = isPolice
+                    ? !!(g.dossiers && g.dossiers[zone] && g.dossiers[zone].score >= 50)
+                    : (g.spies || []).length >= 2;
+                  const enemyTotal = unidadesTotal(D.unidades);
+                  const tiposDisp = A.unidades.filter(u => (u.qtd || 0) > 0);
+                  const alocadoDe = k => BATTLE_SECTORS.reduce((s2, sec) => s2 + (cfDeploy[sec][k] || 0), 0);
+                  const restanteDe = k => { const u = tiposDisp.find(x => x.id === k); return (u ? u.qtd : 0) - alocadoDe(k); };
+                  const totalAlocado = tiposDisp.reduce((s2, u) => s2 + alocadoDe(u.id), 0);
+                  const totalTropa = tiposDisp.reduce((s2, u) => s2 + u.qtd, 0);
+                  const incDeploy = (sec, k) => { if (restanteDe(k) <= 0) return; setCfDeploy(d => ({ ...d, [sec]: { ...d[sec], [k]: (d[sec][k] || 0) + 1 } })); };
+                  const decDeploy = (sec, k) => { setCfDeploy(d => ({ ...d, [sec]: { ...d[sec], [k]: Math.max(0, (d[sec][k] || 0) - 1) } })); };
+                  const distribuirIgual = () => {
+                    const nd = { left:{}, center:{}, right:{} };
+                    tiposDisp.forEach(u => {
+                      const base = Math.floor(u.qtd / 3), resto = u.qtd - base * 2;
+                      nd.left[u.id] = base; nd.center[u.id] = resto; nd.right[u.id] = base;
+                    });
+                    setCfDeploy(nd); Audio.play("tap");
+                  };
+                  const secX = { left: 16.7, center: 50, right: 83.3 };
+                  const dz2 = isPolice && g.dossiers && zone != null ? g.dossiers[zone] : null;
+                  const weakTat2 = dz2 && dz2.score >= 100 && dz2.intel ? dz2.intel.weakness : null;
+                  return (
+                    <div style={{ padding:14 }}>
+                      <div className="font-mono font-bold text-center" style={{ fontSize:13, letterSpacing:"0.05em", color:"#fff", marginBottom:2 }}>⚔️ TEATRO DE BATALHA · {String(confronto.territorio.nome || "").toUpperCase()}</div>
+                      <div className="font-mono text-center" style={{ fontSize:9, color:C.mut, marginBottom:8 }}>
+                        Sua força <b style={{ color:A.cor }}>{Math.round(A.forcaTotal || 0)}</b> vs <b style={{ color:D.cor }}>{Math.round(D.forcaTotal || 0)}</b> {D.nome}
+                        {confronto.aditivos && confronto.aditivos.explosive ? ` · 💣 +${Math.round(confronto.aditivos.explosive.push*100)}%` : ""}
+                        {confronto.aditivos && confronto.aditivos.equipAtk > 0 ? ` · 🔫 +${Math.round(confronto.aditivos.equipAtk*100)}%` : ""}
+                        {` · 💪 ${confronto.aditivos ? confronto.aditivos.morale : g.morale}%`}
+                      </div>
+                      {/* O CAMPO: polígono da zona + 3 setores */}
+                      <svg viewBox="0 0 100 72" style={{ width:"100%", display:"block", background:"#05070c", borderRadius:10, border:`1px solid ${C.line}` }}>
+                        <defs><clipPath id="cfZoneClip"><polygon points={polyPts} /></clipPath></defs>
+                        <polygon points={polyPts} fill={D.cor} fillOpacity="0.13" stroke={D.cor} strokeOpacity="0.6" strokeWidth="0.6" />
+                        {BATTLE_SECTORS.map((sec, i) => (
+                          <g key={sec}>
+                            <rect x={i * 33.34} y="0" width="33.33" height="72" clipPath="url(#cfZoneClip)"
+                              fill={i === 1 ? "#ffffff" : "#8899bb"} fillOpacity="0.04" />
+                            {i > 0 && <line x1={i * 33.34} y1="2" x2={i * 33.34} y2="70" stroke="#2a3448" strokeWidth="0.5" strokeDasharray="2,2" />}
+                            <text x={secX[sec]} y="6" textAnchor="middle" style={{ fontSize:3.2, fill:"#7a8699", fontFamily:"monospace", letterSpacing:"0.1em" }}>{SECTOR_LABEL[sec]}</text>
+                            {/* inimigo no topo do setor */}
+                            <text x={secX[sec]} y="18" textAnchor="middle" style={{ fontSize:7 }}>
+                              {hasIntel ? ((enemyDep[sec] && enemyDep[sec][0] && enemyDep[sec][0].emoji) || "👥") : "❓"}
+                            </text>
+                            <text x={secX[sec]} y="25" textAnchor="middle" style={{ fontSize:3.6, fill:D.cor, fontFamily:"monospace", fontWeight:700 }}>
+                              {hasIntel ? `×${sectorCount(enemyDep, sec)}` : "×?"}
+                            </text>
+                            {/* suas tropas embaixo do setor */}
+                            <text x={secX[sec]} y="58" textAnchor="middle" style={{ fontSize:7 }}>
+                              {(() => { const ks = Object.entries(cfDeploy[sec] || {}).filter(([,q]) => q > 0); if (!ks.length) return "·"; const u = tiposDisp.find(x => x.id === ks[0][0]); return u ? u.emoji : "·"; })()}
+                            </text>
+                            <text x={secX[sec]} y="65" textAnchor="middle" style={{ fontSize:3.6, fill:A.cor, fontFamily:"monospace", fontWeight:700 }}>
+                              ×{Object.values(cfDeploy[sec] || {}).reduce((a, b) => a + b, 0)}
+                            </text>
+                          </g>
+                        ))}
+                      </svg>
+                      <div className="font-mono text-center" style={{ fontSize:8, color: hasIntel ? "#7ad08a" : C.warn, margin:"4px 0 6px" }}>
+                        {hasIntel ? "🕵 INTEL: posições inimigas reveladas" : `❓ Posições desconhecidas (~${Math.max(1, Math.round(enemyTotal * 0.7))}–${Math.round(enemyTotal * 1.4)} homens) — ${isPolice ? "abra um dossiê da zona" : "contrate 2+ olheiros"} para revelar`}
+                      </div>
+                      {/* ALOCAÇÃO POR SETOR */}
+                      <div className="flex items-center justify-between" style={{ marginBottom:4 }}>
+                        <span className="font-mono font-bold" style={{ fontSize:9, color:"#fff", letterSpacing:"0.06em" }}>POSICIONAR TROPAS <span style={{ color: totalAlocado < totalTropa ? C.warn : "#7ad08a" }}>({totalAlocado}/{totalTropa})</span></span>
+                        <button onClick={distribuirIgual} className="pe-btn font-mono rounded px-2 py-1" style={{ fontSize:8.5, background:"#141a26", color:"#5BA0C0", border:"1px solid #5BA0C066" }}>⚖ DISTRIBUIR IGUAL</button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1" style={{ marginBottom:8 }}>
+                        {BATTLE_SECTORS.map(sec => (
+                          <div key={sec} className="rounded-lg p-1.5" style={{ background:"#0d1119", border:"1px solid #1e2637" }}>
+                            <div className="font-mono text-center" style={{ fontSize:7.5, color:C.mut, letterSpacing:"0.06em", marginBottom:3 }}>{SECTOR_LABEL[sec]}</div>
+                            {tiposDisp.map(u => (
+                              <div key={u.id} className="flex items-center justify-between" style={{ marginBottom:2 }}>
+                                <span style={{ fontSize:11 }}>{u.emoji}</span>
+                                <span className="flex items-center" style={{ gap:3 }}>
+                                  <button onClick={() => decDeploy(sec, u.id)} className="pe-btn font-mono" style={{ fontSize:10, width:16, height:16, lineHeight:1, background:"#141a26", color:"#ccc", border:"1px solid #2a3448", borderRadius:4 }}>−</button>
+                                  <span className="font-mono font-bold" style={{ fontSize:9, color:"#fff", minWidth:12, textAlign:"center" }}>{cfDeploy[sec][u.id] || 0}</span>
+                                  <button onClick={() => incDeploy(sec, u.id)} className="pe-btn font-mono" style={{ fontSize:10, width:16, height:16, lineHeight:1, background: restanteDe(u.id) > 0 ? "#1a2b1a" : "#141a26", color: restanteDe(u.id) > 0 ? "#7ad08a" : "#555", border:"1px solid #2a3448", borderRadius:4 }}>+</button>
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                      {totalAlocado < totalTropa && <div className="font-mono text-center" style={{ fontSize:8, color:C.mut, marginBottom:6 }}>⚠ {totalTropa - totalAlocado} na reserva não lutam — aloque tudo ou use DISTRIBUIR IGUAL</div>}
+                      {/* ORDEM DE BATALHA (táticas) */}
+                      <div className="font-mono font-bold" style={{ fontSize:9, color:"#fff", letterSpacing:"0.06em", marginBottom:4 }}>ORDEM DE BATALHA — tocar para INICIAR:</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[["frontal","⚡ Ataque Frontal","+10% onde concentrar >50% da força"],["emboscada","🌙 Emboscada","+10% nos flancos"],["reforco","🛡️ Reforço Defensivo","menos baixas"],["recuo","🏃 Recuo Estratégico","cancela com perdas mínimas"]].map(([k, lab, desc]) => {
+                          const isWeak = weakTat2 === k;
+                          return (
+                            <button key={k} onClick={() => escolherTatica(k)} className="pe-btn rounded-lg" style={{ padding:"8px 8px", background: isWeak ? "#2a2410" : "#141a26", border:`1px solid ${isWeak ? "#D9B25F" : C.line}`, textAlign:"left", boxShadow: isWeak ? "0 0 10px #D9B25F44" : "none" }}>
+                              <div className="font-mono font-bold" style={{ fontSize:11, color: isWeak ? "#D9B25F" : "#fff" }}>{lab}</div>
+                              <div className="font-mono" style={{ fontSize:8, color: isWeak ? "#D9B25F" : C.mut, marginTop:2 }}>{isWeak ? "🎯 FRAQUEZA REVELADA · +15%" : desc}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button onClick={() => setConfronto(null)} className="font-mono w-full" style={{ marginTop:10, fontSize:10, color:C.mut, background:"none", border:"none", cursor:"pointer" }}>cancelar</button>
+                    </div>
+                  );
+                })()}
+                {/* ===== TEATRO DE BATALHA: FASE BATALHA (animada) ===== */}
+                {cfFase === "batalha" && res && (() => {
+                  const zone = confronto.zone;
+                  const poly = normalizeZonePoly(zone);
+                  const polyPts = poly.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+                  const enemyDep = (cfEnemyDeploy && cfEnemyDeploy.deploy) || { left:[], center:[], right:[] };
+                  const depU = res.deployUnits || { left:[], center:[], right:[] };
+                  const secX = { left: 16.7, center: 50, right: 83.3 };
+                  return (
+                    <div style={{ padding:14, background:"#000", borderRadius:12 }}>
+                      <div className="font-mono text-center" style={{ fontSize:10, color:C.mut, letterSpacing:"0.1em", marginBottom:8 }}>⚔ BATALHA EM {String(confronto.territorio.nome || "").toUpperCase()}</div>
+                      <svg viewBox="0 0 100 72" style={{ width:"100%", display:"block", background:"#05070c", borderRadius:10, border:`1px solid ${C.line}` }}>
+                        <defs><clipPath id="cfZoneClipB"><polygon points={polyPts} /></clipPath></defs>
+                        <polygon points={polyPts} fill={D.cor} fillOpacity="0.10" stroke={D.cor} strokeOpacity="0.5" strokeWidth="0.6" />
+                        {BATTLE_SECTORS.map((sec, i) => {
+                          const sr = (res.sectors || [])[i];
+                          const resolvido = cfSector > i || cfSector >= 3;
+                          const ativo = cfSector === i;
+                          const myN = sectorCount(depU, sec), enN = sectorCount(enemyDep, sec);
+                          const myEmoji = (depU[sec] && depU[sec][0] && depU[sec][0].emoji) || "·";
+                          const enEmoji = (enemyDep[sec] && enemyDep[sec][0] && enemyDep[sec][0].emoji) || "👥";
+                          return (
+                            <g key={sec}>
+                              {i > 0 && <line x1={i * 33.34} y1="2" x2={i * 33.34} y2="70" stroke="#2a3448" strokeWidth="0.5" strokeDasharray="2,2" />}
+                              {ativo && <rect x={i * 33.34} y="0" width="33.33" height="72" clipPath="url(#cfZoneClipB)" fill="#ffb02e" fillOpacity="0.08" />}
+                              <text x={secX[sec]} y="6" textAnchor="middle" style={{ fontSize:3, fill:"#7a8699", fontFamily:"monospace" }}>{SECTOR_LABEL[sec]}</text>
+                              {/* inimigo */}
+                              <text x={secX[sec]} y="18" textAnchor="middle" style={{ fontSize:7, opacity: resolvido && sr && sr.win ? 0.25 : 1 }}>{enEmoji}</text>
+                              <text x={secX[sec]} y="25" textAnchor="middle" style={{ fontSize:3.6, fill:D.cor, fontFamily:"monospace", fontWeight:700 }}>×{enN}</text>
+                              {/* tropa do jogador: avança quando o setor está ativo/resolvido */}
+                              <g style={{ transform:`translateY(${ativo || resolvido ? -14 : 0}px)`, transition:"transform 2.2s ease" }}>
+                                <text x={secX[sec]} y="58" textAnchor="middle" style={{ fontSize:7, opacity: resolvido && sr && sr.lost ? 0.25 : 1 }}>{myEmoji}</text>
+                                <text x={secX[sec]} y="65" textAnchor="middle" style={{ fontSize:3.6, fill:A.cor, fontFamily:"monospace", fontWeight:700 }}>×{myN}</text>
+                              </g>
+                              {/* troca de fogo no setor ativo */}
+                              {ativo && <text x={secX[sec]} y="40" textAnchor="middle" className="pe-burst" style={{ fontSize:8 }}>💥</text>}
+                              {/* selo do setor resolvido */}
+                              {resolvido && sr && (
+                                <g>
+                                  <rect x={i * 33.34 + 3} y="32" width="27.3" height="8" rx="1.5" fill={sr.win ? "#0f2417" : sr.lost ? "#2a0d0d" : "#241f0d"} stroke={sr.win ? "#3FA66A" : sr.lost ? "#C94B4B" : "#C99B3F"} strokeWidth="0.4" />
+                                  <text x={secX[sec]} y="37.5" textAnchor="middle" style={{ fontSize:3.1, fill: sr.win ? "#7ad08a" : sr.lost ? "#ff8a7a" : "#e8c86a", fontFamily:"monospace", fontWeight:700 }}>
+                                    {sr.flank ? "FLANQUEADO ✔" : sr.win ? "TOMADO ✔" : sr.lost ? "REPELIDO ✖" : "DISPUTADO"}
+                                  </text>
+                                </g>
+                              )}
+                            </g>
+                          );
+                        })}
+                      </svg>
+                      <div style={{ minHeight:44, display:"flex", flexDirection:"column", justifyContent:"center", gap:4, padding:"8px 4px" }}>
+                        {cfLog.map((line, i) => (
+                          <div key={i} className="cf-fadein font-mono text-center" style={{ fontSize:10.5, color:"#ddd", lineHeight:1.3 }}>{line}</div>
+                        ))}
+                      </div>
+                      <div style={{ height:6, background:"#10141c", borderRadius:99, overflow:"hidden" }}>
+                        <div style={{ width:cfProg + "%", height:"100%", background:"linear-gradient(90deg,#C99B3F,#ff6b5a)" }} />
+                      </div>
+                    </div>
+                  );
+                })()}
+                {cfFase === "__old_briefing" && A && D && (
                   <div style={{ padding:16 }}>
                     <div className="font-mono font-bold text-center" style={{ fontSize:14, letterSpacing:"0.05em", color:"#fff", marginBottom:12 }}>⚔️ CONFRONTO EM {String(confronto.territorio.nome || "").toUpperCase()}</div>
                     <div className="flex gap-2" style={{ marginBottom:10 }}>
@@ -12642,7 +12954,7 @@ export default function App() {
                     <button onClick={() => setConfronto(null)} className="font-mono w-full" style={{ marginTop:10, fontSize:10, color:C.mut, background:"none", border:"none", cursor:"pointer" }}>cancelar</button>
                   </div>
                 )}
-                {cfFase === "animando" && (
+                {cfFase === "__old_anim" && (
                   <div style={{ padding:18, background:"#000", borderRadius:12, minHeight:300, display:"flex", flexDirection:"column" }}>
                     <div className="font-mono text-center" style={{ fontSize:10, color:C.mut, letterSpacing:"0.1em", marginBottom:14 }}>SALA DE GUERRA · {String(confronto.territorio.nome || "").toUpperCase()}</div>
                     <div className="flex gap-3 items-end" style={{ marginBottom:16 }}>
@@ -12680,6 +12992,20 @@ export default function App() {
                         <div className="flex justify-between font-mono" style={{ fontSize:11, color:"#ddd", marginBottom:4 }}><span>Suas baixas</span><span style={{ color:"#ff8a7a" }}>−{res.baixasAtacante || 0}</span></div>
                         <div className="flex justify-between font-mono" style={{ fontSize:11, color:"#ddd" }}><span>Baixas inimigas</span><span style={{ color:"#7ad08a" }}>−{res.baixasDefensor || 0}</span></div>
                       </div>
+                      {res.sectors && res.sectors.length > 0 && (
+                        <div className="rounded-lg" style={{ background:"#0d1119", border:`1px solid ${C.line}`, padding:12, marginBottom:12 }}>
+                          <div className="font-mono" style={{ fontSize:9, color:C.mut, letterSpacing:"0.08em", marginBottom:6 }}>FRENTES DE BATALHA</div>
+                          {res.sectors.map(sr => (
+                            <div key={sr.id} className="flex justify-between font-mono" style={{ fontSize:10.5, color:"#ddd", marginBottom:3 }}>
+                              <span>{SECTOR_LABEL[sr.id]}</span>
+                              <span style={{ color:C.mut, fontSize:9 }}>{sr.myCount}×{sr.enCount}</span>
+                              <span style={{ color: sr.win ? "#7ad08a" : sr.lost ? "#ff8a7a" : "#e8c86a", fontWeight:700 }}>
+                                {sr.flank ? "FLANQUEADO ✔" : sr.win ? "TOMADO ✔" : sr.lost ? "REPELIDO ✖" : "DISPUTADO ➖"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <div className="rounded-lg" style={{ background:"#0d1119", border:`1px solid ${C.line}`, padding:12, marginBottom:14 }}>
                         <div className="font-mono" style={{ fontSize:9, color:C.mut, letterSpacing:"0.08em", marginBottom:6 }}>CONSEQUÊNCIAS</div>
                         {r === "vitoria" && (<>
