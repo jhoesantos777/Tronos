@@ -1,5 +1,5 @@
 // TRONOS — Service Worker (cache para jogo offline)
-const CACHE = "tronos-v100-teatro-arte";
+const CACHE = "tronos-v101-personagens-cores";
 const CORE = [
   "./index.html",
   "./manifest.json",
@@ -43,14 +43,6 @@ const CORE = [
   "./assets/arsenal/m2.png",
   "./assets/arsenal/m3.png",
   "./assets/arsenal/m4.png",
-  "./assets/batalha/me_sel.png",
-  "./assets/batalha/me_war.png",
-  "./assets/batalha/cs_sel.png",
-  "./assets/batalha/cs_war.png",
-  "./assets/batalha/fd_sel.png",
-  "./assets/batalha/fd_war.png",
-  "./assets/batalha/cv_sel.png",
-  "./assets/batalha/cv_war.png",
   "https://unpkg.com/react@18/umd/react.production.min.js",
   "https://unpkg.com/react-dom@18/umd/react-dom.production.min.js",
   "https://cdn.tailwindcss.com",
