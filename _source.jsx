@@ -846,6 +846,25 @@ const AI_ALL = ["cs", "fd", "cv"];
 // Personagens
 const CH = { boss: "Salomão", mgr: "Russo", rivF: "Neguinho", par: "Ferraz", sup: "Sgt. Brito", rivP: "Vidal" };
 
+// ============ CAMPANHA POLICIAL: "PORTO ESPERANÇA CONFIDENCIAL" ============
+// Elenco fixo da campanha (a cidade fala através deles)
+const CAMP_CAST = {
+  ivone: "Cap. Ivone Duarte",     // comandante direta — a voz do quartel
+  marta: "Dra. Marta Sales",      // promotora íntegra — cobra o caminho limpo
+  rocha: "Corregedor Aníbal Rocha", // a Corregedoria em pessoa
+  bispo: "Bispo",                 // informante de rua — tudo tem preço
+  tulio: "Túlio Andrade",         // assessor do gabinete (Ato 5)
+};
+// Atos da campanha (1 por fase da carreira; avança ao cumprir todas as missões do ato)
+const CAMP_ACTS = [
+  null,
+  { n:1, title:"FARDA NOVA",    desc:"A quebrada tem dono — e não é o Estado." },
+  { n:2, title:"O CERCO",       desc:"O Comando Serpente aperta o anel em volta do centro." },
+  { n:3, title:"SANGUE FRIO",   desc:"Naja é o alvo. A guerra é o método." },
+  { n:4, title:"DINHEIRO SUJO", desc:"Dom Heitor não cai por bala. Siga o dinheiro." },
+  { n:5, title:"O CORVO",       desc:"Jordan é um fantasma. Inteligência é a única arma." },
+];
+
 // ============ CARREIRA v2: "Do Recado ao Trono" ============
 // Escada nova da facção. Os 5 thresholds antigos continuam valendo (mesmo nº de degraus).
 // Rank 5 (Gerente) abre o mapa tutelado; rank 6 (Chefe) é a ascensão ao modo livre.
@@ -2728,6 +2747,109 @@ for (const m of MISSIONS) {
     m.rank = [Math.min(m.rank[0], 3), Math.min(m.rank[1], 3)];
   }
 }
+// ============ CAMPANHA "PORTO ESPERANÇA CONFIDENCIAL" — ATO 1: FARDA NOVA ============
+// Missões de capítulo (camp:true): encadeadas por `requires`, com escolhas morais (flag/d=caixa dois).
+// Não entram no sorteio comum — nextCampMission() oferece sempre a próxima do ato.
+MISSIONS.push(
+  { id:"a1m1", camp:true, act:1, side:"pl", rank:[0,3], title:"Primeira Ronda", risk:"baixo", pay:"R$ 16–32 mil",
+    desc:`Primeiro dia de rua. ${CH.par} dirige devagar de propósito: "A viatura anda no tempo da quebrada, não no seu."`,
+    steps:[
+      { t:`${CH.par} para o carro no alto do morro e desliga o farol. "Regra um: antes de agir, a gente enxerga. O que você vê?"`,
+        c:[
+          { l:"Os olheiros — um em cada esquina do beco", p:.8,
+            w:{ t:`"Boa." ${CH.par} anota sem olhar pro caderno. "Menino da laje, menino do poste. Agora você conhece o turno deles. Quem enxerga olheiro, enxerga a boca."`, m:10, x:9, rp:2 },
+            f:{ t:"Você apontou dois moleques que só jogavam bola. Ferraz riu baixo: 'Calma. Nem todo mundo aqui é do movimento. Isso também é regra.'", m:6, x:4 } },
+          { l:"O carro parado com motor ligado há 20 minutos", p:.7,
+            w:{ t:"Placa fria, motorista tenso. Uma abordagem calma e o flagra veio sozinho: rádio comunicador e caderno de anotação do tráfico.", m:14, x:11, rp:3 },
+            f:{ t:"Era só um pai esperando a filha da igreja. Constrangimento, desculpas, e a lição: pressa lê errado.", m:6, x:3 } },
+        ]},
+      { t:`Fim do turno. Uma senhora segura seu braço na descida: "Levaram a bicicleta do meu neto. Todo mundo sabe quem foi." ${CH.par} espera sua decisão.`,
+        c:[
+          { l:"Ir agora na casa apontada, com conversa", p:.75,
+            w:{ t:"Sem grito, sem arma. A bicicleta voltou 'achada no valão'. A senhora te abençoou na frente de todo mundo. Na quebrada, notícia boa também corre.", m:8, x:10, rp:4 },
+            f:{ t:"O menino sumiu pela laje antes de você bater. A bicicleta apareceu dois dias depois, desmontada. Fica a lição do tempo certo.", x:5 } },
+          { l:"Registrar a ocorrência e prometer retorno", p:.85,
+            w:{ t:"Papel certinho, retorno cumprido na semana. Não brilha, mas constrói: a senhora agora te chama pelo nome.", m:8, x:7, rp:2 },
+            f:{ t:"O registro dormiu na fila da delegacia. A senhora não reclamou — e isso doeu mais.", x:3, rp:-1 } },
+        ]},
+    ]},
+  { id:"a1m2", camp:true, act:1, side:"pl", rank:[0,3], requires:["a1m1"], title:"Vidro Quebrado", risk:"baixo", pay:"R$ 24–41 mil",
+    desc:"Alarme disparado na mercearia do Seu Nilton, 3h da manhã. Terceira vez no mês — e ninguém nunca chega a tempo.",
+    steps:[
+      { t:"Vocês chegam com o alarme ainda tocando. A porta de aço tá levantada meio palmo.",
+        c:[
+          { l:"Cercar os fundos primeiro, sem sirene", p:.75,
+            w:{ t:"Dois saíram pelo cano da laje — direto no seu cerco. O terceiro entregou o ferro sem drama. Seu Nilton não perdeu um palito.", m:18, x:12, rp:3 },
+            f:{ t:"O beco dos fundos tinha saída que o mapa não mostra. Fugiram, mas largaram a mercadoria no caminho.", m:10, x:6 } },
+          { l:"Entrada frontal anunciada", p:.6,
+            w:{ t:"Voz firme, lanterna alta. Renderam-se na hora — eram meninos, o mais velho com 17. Você chamou o conselho tutelar antes da imprensa.", m:14, x:10, rp:4 },
+            f:{ t:"Correria no escuro, prateleira no chão, um corte no seu braço. Pegaram um; dois voaram.", m:8, x:5, h:-8 } },
+        ]},
+      { type:"timer", time:6, onTimeout:1,
+        t:`No rádio, ${CH.par} avisa: um dos que fugiram dobrou na travessa — vai sumir no beco em segundos. DECIDE:`,
+        c:[
+          { l:"Cortar pela feira desmontada", p:.7,
+            w:{ t:"Você derrubou ele entre as barracas vazias. No bolso, a chave do cadeado da mercearia: era o sobrinho do funcionário. Caso fechado com nome e endereço.", m:16, x:12, rp:3 },
+            f:{ t:"Uma lona te enroscou o pé. Ele sumiu — mas você viu o rosto. A quebrada agora sabe que você viu.", x:6 } },
+          { l:"Deixar ir e preservar o flagrante que já tem", p:.9,
+            w:{ t:"Um na mão vale dois no beco. O que ficou entregou o comprador do produto — um desmanche dois bairros adiante. A ficha cresceu sozinha.", m:12, x:9 },
+            f:{ t:"O detido ficou mudo feito muro. Sem o segundo, o caso encolheu.", m:8, x:5 } },
+        ]},
+    ]},
+  { id:"a1m3", camp:true, act:1, side:"pl", rank:[0,3], requires:["a1m2"], title:"O Envelope do Sargento", risk:"médio", pay:"R$ 16–24 mil",
+    desc:`A ${CAMP_CAST.ivone} te escalou pra ronda a pé com o ${CH.sup}. "Aprende com quem conhece a rua", disse ela. Você vai aprender — só não o que ela imaginava.`,
+    steps:[
+      { t:`${CH.sup} cumprimenta cada comerciante pelo nome. No bar do Careca, ele manda você "dar uma olhada na esquina" — e você dá. Mas o espelho atrás do balcão mostra tudo.`,
+        c:[
+          { l:"Observar sem se entregar", p:.85,
+            w:{ t:"No espelho: o dono do bar desliza um envelope pardo. Brito guarda no colete como quem guarda cigarro. Rotina antiga — mão treinada.", x:8 },
+            f:{ t:"Brito percebeu seu olhar no espelho. Sustentou, sorriu, e guardou o envelope do mesmo jeito. Recado dado sem palavra.", x:6, R:1 } },
+          { l:"Voltar pra dentro no meio da cena", p:.6,
+            w:{ t:"Você entrou 'procurando o banheiro' e viu o envelope trocar de mão a um metro. Brito nem piscou: 'Contribuição da festa junina.' O bar inteiro riu. Menos você.", x:9 },
+            f:{ t:"Você tropeçou num banquinho e a cena congelou. O envelope sumiu, o assunto mudou, e o Brito te olhou até a esquina.", x:5, R:1 } },
+        ]},
+      { t:`Fim do turno, vestiário vazio. Você tem 30 segundos com a própria consciência antes do ${CH.sup} voltar do banho. O que faz com o que viu?`,
+        c:[
+          { l:`Reportar à ${CAMP_CAST.ivone} — ficha limpa`, p:1,
+            w:{ t:`A capitã ouviu em silêncio, anotou duas linhas e disse: "Você acabou de escolher o caminho difícil. Eu seguro sua mão nele — mas o quartel tem ouvidos." Brito soube em 48h. O corredor ficou mais frio.`, x:14, rp:6, R:1, flag:{ hero1:true } } },
+          { l:"Baixar o olhar e seguir a ronda", p:1,
+            w:{ t:`Na sexta, seu armário tinha um envelope fino: "pela discrição". Brito te chama de "parceiro" agora — e sargento velho protege quem sabe calar.`, c:1, d:10, A:1, flag:{ brito_calado:true } } },
+        ]},
+    ]},
+  { id:"a1m4", camp:true, act:1, side:"pl", rank:[0,3], requires:["a1m3"], title:"Os Olhos do Dandinho", risk:"médio", pay:"R$ 32–57 mil",
+    desc:`Os furtos em série têm mandante: Dandinho da Baixada, gerente d'Os Corvos. A ${CAMP_CAST.ivone} quer o olheiro dele — o menino que avisa quando a viatura sobe.`,
+    steps:[
+      { type:"memory",
+        t:"Campana de madrugada no ponto de táxi. Três motos passam devagar demais, com passageiros que não pagam corrida. Grave as placas:",
+        mem:{ show:4.5, showItems:["FQH-7702","NRT-3389","FQH-2071"], question:"Qual placa passou DUAS vezes? (a moto do olheiro)", options:["FQH-7702","NRT-3389","FQH-2071","Nenhuma delas"], answerIdx:1 },
+        w:{ t:"A NRT-3389 rodou o quarteirão duas vezes — garupa com celular na mão, filmando a rua. Você anotou rosto, rota e horário. O olheiro do Dandinho tem nome agora.", m:24, x:14, rp:3 },
+        f:{ t:"Você cravou a placa errada: parou um motoboy de pizzaria. Enquanto isso, o olheiro real assistiu de camarote — e o Dandinho mudou o esquema.", x:5, q:4 } },
+      { t:"O olheiro é um menino de 15 anos, cria da avó. Vocês pegam ele saindo da escola — sem farda, sem alarde.",
+        c:[
+          { l:"Conversa com a avó presente", p:.75,
+            w:{ t:"A avó chorou, o menino cedeu: entregou o ponto onde o Dandinho dorme às terças. 'Mas ninguém pode saber que fui eu, moço.' Ninguém vai saber.", m:16, x:13, rp:3 },
+            f:{ t:"O menino negou tudo com a avó do lado. Mas na saída, deixou cair um papel de propósito: um endereço. Meio caminho.", m:8, x:8 } },
+          { l:"Aperto clássico: 'a gente sabe de tudo'", p:.55,
+            w:{ t:"O blefe colou. Ele abriu o jogo tremendo — endereço, dia, horário. Mas menino assustado conta pros outros que contou.", m:18, x:10, q:5 },
+            f:{ t:"'Sabe nada.' O menino é cria de quebrada, não quebra no grito. E o Dandinho soube da abordagem em uma hora.", x:4, q:6 } },
+        ]},
+    ]},
+  { id:"a1m5", camp:true, act:1, side:"pl", rank:[0,3], requires:["a1m4"], title:"A Queda de Dandinho", risk:"alto", pay:"R$ 49–81 mil",
+    desc:`Terça-feira, 4h50. O endereço confere: Dandinho da Baixada dorme na casa da beira do valão. A ${CAMP_CAST.ivone} autorizou. "Sem tiro, se puder. Quero ele inteiro no fórum."`,
+    steps:[
+      { type:"qte", tag:"vest", t:"A porta é frágil, o sono é pesado, mas a janela dá pro valão. TOQUE no momento exato da entrada — antes do galo, depois da última moto:",
+        qte:{ window:[0.42,0.62], period:1250,
+          w:{ t:"Entrada cirúrgica: Dandinho acordou com a algema fechando. No colchão, um caderno com a contabilidade da Baixada inteira — nomes, valores, esquinas.", m:36, x:18, rp:6 },
+          f:{ t:"Um degrau rangeu. Dandinho voou pela janela de cueca e caiu no valão — preso, mas o caderno virou confete na correnteza. Ficou a prisão, foi-se a prova maior.", m:20, x:10, h:-6 } } },
+      { t:"Na delegacia, o advogado do Dandinho chega antes do café. No corredor, ele te aborda sozinho: 'Meu cliente tem memória curta e cofre fundo. Me entende?'",
+        c:[
+          { l:"'Vai entender o juiz.' — seguir protocolo", p:1,
+            w:{ t:`Dandinho autuado, caderno (ou o que restou) periciado. A ${CAMP_CAST.marta}, promotora do caso, te apertou a mão: "Fazia tempo que um auto de prisão não chegava limpo assim na minha mesa." Os Corvos perderam a Baixada — e alguém no morro anotou seu nome.`, m:20, x:16, rp:6, flag:{ dandinho_preso:true } } },
+          { l:"Ouvir o valor — só ouvir", p:1,
+            w:{ t:"Você não disse sim. Também não disse não. O advogado sorriu e anotou seu telefone 'para emergências'. Dandinho foi autuado mesmo assim — mas agora existe um número que sabe te achar.", m:20, x:12, c:1, d:25, rp:2, flag:{ dandinho_preso:true, advogado_contato:true } } },
+        ]},
+    ]},
+);
 // ---------- MISSÕES ADICIONAIS (v9 — progressão mais longa) ----------
 MISSIONS.push(
   // PM — patrulha
@@ -4706,6 +4828,9 @@ function initCareer(side, mother, pname) {
     gear:{ vest:false, gear:false, agil:false, arma:false },
     assets:{ car:false, house:false },
     biz:{ b1:false, b2:false, b3:false },
+    // Campanha "Porto Esperança Confidencial" (só polícia): atos, flags de enredo e caixa dois
+    campaign: side === "pl" ? { act:1, done:[], flags:{}, dirty:0, hist:[], bosses:[], epilogue:null } : null,
+    contasAtraso: 0,
     people: side === "fc"
       ? [mkPerson("russo", { ...NPC_BASE.russo, name: careerCast(mother).mgr }), mkPerson("neguinho", NPC_BASE.neguinho)]
       : [mkPerson("ferraz", NPC_BASE.ferraz), mkPerson("vidal", NPC_BASE.vidal), mkPerson("brito", NPC_BASE.brito)],
@@ -4719,17 +4844,35 @@ function migrateCareer(cr) {
   if (!cr) return cr;
   if (!cr.gear) cr.gear = { vest:false, gear:false, agil:false, arma:false };
   if (cr.gear.arma == null) cr.gear.arma = cr.side === "fc" && cr.rank >= 3; // Contenção+ já tem o ferro
+  if (cr.side === "pl" && !cr.campaign) cr.campaign = { act:1, done:[], flags:{}, dirty:0, hist:[], bosses:[], epilogue:null };
+  if (cr.contasAtraso == null) cr.contasAtraso = 0;
   return cr;
+}
+// Próxima missão da campanha policial: respeita ato, encadeamento (requires),
+// flags de enredo (reqFlags) e o "tier" da carreira (corp*4+rank) para dar ritmo.
+function nextCampMission(cr) {
+  if (cr.side !== "pl" || !cr.campaign) return null;
+  const cp = cr.campaign;
+  const tier = cr.corp * 4 + cr.rank;
+  return MISSIONS.find(m => m.camp && m.act === cp.act
+    && !cp.done.includes(m.id)
+    && (m.requires || []).every(r => cp.done.includes(r))
+    && (!m.reqFlags || Object.entries(m.reqFlags).every(([k, v]) => !!cp.flags[k] === !!v))
+    && tier >= (m.act - 1)
+  ) || null;
 }
 function rollOffers(cr) {
   if (cr.final || cr.jail > 0) return [];
   const corpId = cr.side === "pl" ? CORPS[cr.corp].id : null;
-  const pool = MISSIONS.filter(m => m.side === cr.side
+  const pool = MISSIONS.filter(m => !m.camp && m.side === cr.side
     && (cr.side === "fc" || (m.corp || "pm") === corpId)
     && cr.rank >= m.rank[0] && cr.rank <= m.rank[1]
     && !(m.inv && cr.invest)
   ).map(m => m.id);
-  return pool.sort(() => Math.random() - 0.5).slice(0, Math.min(3, pool.length));
+  const rnd = pool.sort(() => Math.random() - 0.5);
+  const campM = nextCampMission(cr);
+  if (campM) return [campM.id, ...rnd.slice(0, 2)];
+  return rnd.slice(0, Math.min(3, pool.length));
 }
 
 // Escolhe qual facção assume um território quando o crime chega a 100% (modo polícia).
@@ -5263,7 +5406,7 @@ export default function App() {
         step = c.invest.stage;
         c.advInv = true;
       }
-      c.scene = { mid, step, phase:"prompt", out:null, acc:{ m:0,x:0,h:0,q:0,L:0,c:0,R:0,A:0,rp:0,arrest:false }, ended:false, single: !!m.inv };
+      c.scene = { mid, step, phase:"prompt", out:null, acc:{ m:0,x:0,h:0,q:0,L:0,c:0,R:0,A:0,rp:0,d:0,flags:{},arrest:false }, ended:false, single: !!m.inv };
       return c;
     });
   }
@@ -5272,7 +5415,8 @@ export default function App() {
   function applyOutcome(c, out, ok) {
     const sc = c.scene;
     const mission = MISSIONS.find(m => m.id === sc.mid);
-    for (const k of ["m","x","h","q","L","c","R","A","rp"]) sc.acc[k] += out[k] || 0;
+    for (const k of ["m","x","h","q","L","c","R","A","rp","d"]) sc.acc[k] += out[k] || 0;
+    if (out.flag) Object.assign(sc.acc.flags = sc.acc.flags || {}, out.flag);
     if (out.arrest) sc.acc.arrest = true;
     sc.out = { text: out.t, ok, next: out.next != null ? out.next : null };
     sc.phase = "outcome";
@@ -5307,6 +5451,25 @@ export default function App() {
       c.riv = clamp(c.riv + a.R, 0, 9);
       c.ally = clamp(c.ally + a.A, -3, 9);
       if (c.side === "pl") c.rep = clamp(c.rep + (a.rp || 0) + (a.x >= 12 ? 1 : 0) - (a.c > 0 ? 3 : 0), -10, 100);
+      // Campanha policial: caixa dois, flags de enredo e progressão de ato
+      if (c.side === "pl" && c.campaign) {
+        const cp = c.campaign;
+        if (a.d) cp.dirty += a.d;
+        if (a.flags && Object.keys(a.flags).length) Object.assign(cp.flags, a.flags);
+        if (mis.camp && !cp.done.includes(mis.id)) {
+          cp.done.push(mis.id);
+          chronPush(c, 2, c.week, `Capítulo cumprido: ${mis.title}`, "miss");
+          if (mis.boss && !cp.bosses.includes(mis.boss)) cp.bosses.push(mis.boss);
+          const restantes = MISSIONS.filter(m => m.camp && m.act === cp.act && !cp.done.includes(m.id));
+          if (!restantes.length && cp.act < 5) {
+            const antigo = CAMP_ACTS[cp.act];
+            cp.act += 1;
+            const novo = CAMP_ACTS[cp.act];
+            c.log = (c.log ? c.log + "\n" : "") + `📖 FIM DO ATO ${antigo.n} — ${antigo.title}. Começa o ATO ${novo.n}: ${novo.title} — ${novo.desc}`;
+            chronPush(c, 1, c.week, `Ato ${antigo.n} (${antigo.title}) encerrado — começa ${novo.title}`, "promo");
+          }
+        }
+      }
       if (a.arrest) {
         if (c.side === "fc") c.pendingArrest = true;
         else { c.cash = Math.floor(c.cash / 2); c.rep = clamp(c.rep - 5, -10, 100); }
@@ -5470,6 +5633,19 @@ export default function App() {
       const sal = c.side === "pl" ? 20 + c.corp * 15 + c.rank * 8 : 8 + c.rank * 6;
       c.cash += sal;
       c.merit += (c.assets.car ? 2 : 0) + (c.assets.house ? 3 : 0);
+      // Contas da casa (só polícia): o padrão de vida sobe com a patente
+      if (c.side === "pl") {
+        const contas = 8 + c.rank * 3 + c.corp * 4;
+        if (c.cash >= contas) { c.cash -= contas; c.contasAtraso = 0; }
+        else {
+          c.cash = 0;
+          c.contasAtraso = (c.contasAtraso || 0) + 1;
+          c.hp = clamp(c.hp - 6, 5, 100);
+          c.log = (c.log ? c.log + "\n" : "") + (c.contasAtraso >= 2
+            ? "🏠 APERTO EM CASA: segunda semana sem fechar as contas. O silêncio no jantar pesa mais que a escala. (−6 saúde)"
+            : "🏠 As contas da semana não fecharam. Aluguel atrasado, geladeira contada. (−6 saúde)");
+        }
+      }
       if (c.side === "fc") {
         for (const b of BIZ) if (c.biz[b.k]) { c.cash += b.inc; c.heat = clamp(c.heat - b.cool, 0, 100); }
         c.heat = clamp(c.heat - 3, 0, 100);
@@ -5543,6 +5719,24 @@ export default function App() {
         if (c.side === "pl" && c.riv >= 1 && Math.random() < 0.15) {
           c.merit = Math.max(0, c.merit - 6);
           sig.push(`⚠ ${CH.rivP} assinou um resultado que era seu. De novo. (−6 mérito)`);
+        }
+        // Corregedoria (campanha): o Corregedor Rocha fareja ficha suja
+        if (c.side === "pl" && c.campaign) {
+          const cp = c.campaign;
+          if (c.corr >= 3 && !cp.flags.rocha1) {
+            cp.flags.rocha1 = true;
+            sig.push(`⚖ Um bilhete sem assinatura na sua mesa: "Papel aceita tudo. Ficha, não." — dizem que o ${CAMP_CAST.rocha} manda esses quando começa a olhar pra alguém.`);
+          }
+          if (c.corr >= 6) {
+            if (!cp.flags.rocha2) {
+              cp.flags.rocha2 = true;
+              sig.push(`⚖ CORREGEDORIA: ${CAMP_CAST.rocha} abriu investigação preliminar sobre você. A partir de agora, todo relatório seu passa pela lupa dele.`);
+              chronPush(c, 3, c.week, "Corregedoria abriu investigação preliminar", "tra");
+            } else if (Math.random() < 0.25) {
+              c.merit = Math.max(0, c.merit - 8);
+              sig.push("⚖ A Corregedoria travou um relatório seu 'para conferência'. O mérito era seu — ficou na gaveta. (−8 mérito)");
+            }
+          }
         }
         if (sig.length) c.log = (c.log ? c.log + "\n" : "") + sig.join("\n");
       }
@@ -9086,6 +9280,31 @@ export default function App() {
                       </Card>
                     );
                   })()}
+                  {cr.side === "pl" && cr.campaign && CAMP_ACTS[cr.campaign.act] && (() => {
+                    const ato = CAMP_ACTS[cr.campaign.act];
+                    const atoMs = MISSIONS.filter(m => m.camp && m.act === cr.campaign.act);
+                    const feitas = atoMs.filter(m => cr.campaign.done.includes(m.id)).length;
+                    return (
+                      <Card>
+                        <div className="flex justify-between items-center">
+                          <div className="font-mono font-bold" style={{ fontSize:11, color:"#D9B25F", letterSpacing:"0.08em" }}>📖 ATO {ato.n} — {ato.title}</div>
+                          <span className="font-mono" style={{ fontSize:10, color:C.mut }}>{feitas}/{atoMs.length}</span>
+                        </div>
+                        <div className="text-xs mt-1" style={{ color:C.mut, fontStyle:"italic" }}>{ato.desc}</div>
+                        <div className="flex gap-1 mt-2">
+                          {atoMs.map(m => (
+                            <span key={m.id} style={{ flex:1, height:4, borderRadius:99, background: cr.campaign.done.includes(m.id) ? "#D9B25F" : "#232a3a" }} />
+                          ))}
+                        </div>
+                        {cr.campaign.dirty > 0 && (
+                          <div className="font-mono mt-2" style={{ fontSize:10, color:"#ff8a7a" }}>🩸 Caixa dois: {brMoney(cr.campaign.dirty)} — dinheiro que não pode aparecer.</div>
+                        )}
+                        {cr.corr >= 3 && (
+                          <div className="font-mono mt-1" style={{ fontSize:10, color:C.warn }}>⚖ Corregedoria: {cr.corr >= 6 ? "INVESTIGANDO VOCÊ" : "de olho na sua ficha"}</div>
+                        )}
+                      </Card>
+                    );
+                  })()}
                   <div className="font-mono" style={{ fontSize:10, color:C.mut, letterSpacing:"0.1em" }}>SERVIÇOS DISPONÍVEIS</div>
                   {cr.hp < 40 && (
                     <div className="font-mono text-xs rounded-lg p-2" style={{ background:C.panel2, color:C.bad }}>
@@ -9098,11 +9317,12 @@ export default function App() {
                     return (
                       <Card key={id}>
                         <div className="flex justify-between items-start">
-                          <div className="font-bold text-sm">{castText(m.title, cr.mother)}</div>
+                          <div className="font-bold text-sm">{m.camp && <span style={{ color:"#D9B25F" }}>📖 </span>}{castText(m.title, cr.mother)}</div>
                           <span className="font-mono" style={{ fontSize:10, color: m.risk === "alto" ? C.bad : m.risk === "médio" ? C.warn : C.good }}>
                             risco {m.risk}
                           </span>
                         </div>
+                        {m.camp && <div className="font-mono" style={{ fontSize:9, color:"#D9B25F", letterSpacing:"0.08em" }}>CAPÍTULO DA CAMPANHA</div>}
                         <div className="text-xs mt-1" style={{ color:C.mut }}>{castText(m.desc, cr.mother)}</div>
                         <div className="flex justify-between items-center mt-2">
                           <span className="font-mono" style={{ fontSize:10, color:C.mut }}>{m.pay}</span>
