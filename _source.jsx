@@ -923,6 +923,44 @@ function arrestRisk(c) {
     - c.loyal * 0.20 - (a.infl || 0) * 0.22 - (a.pop || 0) * 0.18 - (c.corr || 0) * 4;
   return clamp(raw / 100, 0, 0.9);
 }
+// V300.4: O CHEFE OBSERVA TUDO. Como ele te vê depende da Confiança do Chefe (attr.conf).
+function chiefStance(c) {
+  const cf = (c.attr && c.attr.conf) || 0;
+  if (cf >= 70) return { k:"cria", label:"confia em você", cor:"#5FBF7A" };
+  if (cf >= 40) return { k:"olho", label:"te observa de perto", cor:"#8A93A6" };
+  if (cf >= 20) return { k:"duvida", label:"desconfia de você", cor:"#D9B25F" };
+  return { k:"perigo", label:"quer te testar — ou descartar", cor:"#E06B6B" };
+}
+// Gera (ocasionalmente) um evento do Chefe conforme a confiança. Reusa o modal c.event.
+function chiefEvent(c) {
+  const cast = careerCast(c.mother);
+  const boss = cast.boss;
+  const cf = (c.attr && c.attr.conf) || 0;
+  const roll = Math.random();
+  if (cf >= 68 && roll < 0.28) {
+    // OPORTUNIDADE — o chefe confia e abre uma porta
+    return {
+      t:`${boss} te chamou na laje, longe dos outros: "Tô de olho em você faz tempo, e você não me decepcionou. Tenho um corre que só dou pra quem confio. Topa?"`,
+      c:[
+        { l:"Topar sem perguntar o preço", fx:{ m:22, x:12, at:{ conf:6, resp:5, viol:2 }, q:6 }, r:`Você nem piscou. ${boss} sorriu: "É disso que eu preciso." O corre rendeu — e a sua ficha na cúpula subiu junto.` },
+        { l:"Topar, mas querer entender o risco antes", fx:{ m:14, x:14, at:{ conf:3, icrim:5 } }, r:`${boss} respeitou a cabeça fria: "Esperto. Não quero soldado burro do meu lado." Menos grana, mais confiança na inteligência.` },
+        { l:"Recusar — não é a sua hora", fx:{ at:{ conf:-8, moral:3 } }, r:`"Cada um sabe seu tempo", disse ${boss}, sem esconder a decepção. A porta fechou — e demora pra abrir de novo.` },
+      ],
+    };
+  }
+  if (cf <= 24 && roll < 0.32) {
+    // TESTE / AMEAÇA — o chefe desconfia
+    return {
+      t:`${cast.mgr} te encurralou no beco com dois soldados atrás: "${boss} anda ouvindo coisa sobre você. Ele quer uma prova de que ainda é dos nossos. Hoje. Agora."`,
+      c:[
+        { l:"Provar lealdade na hora, sem hesitar", fx:{ x:8, at:{ conf:12, viol:4, moral:-3 }, q:6 }, r:`Você fez o que tinha que fazer, sem tremer. ${cast.mgr} levou o recado: "Esse ainda serve." A desconfiança recuou — por ora.` },
+        { l:"Comprar tempo com lábia e influência", fx:{ at:{ conf:5, infl:4, icrim:3 } }, r:`Você enrolou com jogo de cintura e nomes certos. ${cast.mgr} franziu a testa mas engoliu. Ganhou tempo — não perdão.` },
+        { l:"Peitar: 'Quem duvida de mim fala na minha cara'", fx:{ at:{ conf:-6, resp:6, viol:3 }, L:-4 }, r:`Você encarou os três sem baixar os olhos. Respeito subiu, confiança despencou. ${boss} vai lembrar da ousadia — pros dois lados.` },
+      ],
+    };
+  }
+  return null;
+}
 
 // ============ CARREIRA v2: "Do Recado ao Trono" ============
 // Escada nova da facção. Os 5 thresholds antigos continuam valendo (mesmo nº de degraus).
@@ -6290,6 +6328,9 @@ export default function App() {
       if (f.rp && c.side === "pl") c.rep = clamp(c.rep + f.rp, -10, 100);
       c.riv = clamp(c.riv + (f.R || 0), 0, 9);
       c.ally = clamp(c.ally + (f.A || 0), -3, 9);
+      if (f.q) c.heat = clamp(c.heat + f.q, 0, 100);
+      // V300.4: eventos podem mexer nos atributos criminais (at:{}) da carreira facção
+      if (f.at && c.attr) for (const [k, v] of Object.entries(f.at)) if (k in c.attr) c.attr[k] = clamp(c.attr[k] + v, 0, 100);
       c.log = choice.r;
       c.event = null;
       return c;
@@ -6474,9 +6515,12 @@ export default function App() {
           else c.ending = (c.rep < 0 || c.corr >= 3) ? "presopl" : "exonerado";
         }
       } else {
-        while (c.rank < 4 && c.merit >= THRESH[c.rank]) {
+        // V300.4: promoção na facção exige mérito E confiança do chefe (ele não entrega galão a quem não confia)
+        const confReq = c.attr ? 26 + c.rank * 9 : 0;
+        while (c.rank < 4 && c.merit >= THRESH[c.rank] && (!c.attr || c.attr.conf >= confReq)) {
           c.rank += 1;
           c.promo = RANKS_FC[c.rank];
+          if (c.attr) c.attr.conf = clamp(c.attr.conf + 4, 0, 100);
           chronPush(c, 1, c.week, `${c.pname} subiu a ${c.promo} no ${BASE_FAC[c.mother].short}`, "promo");
           if (c.rank === 1) c._achv.push("degrau");
           // CONTENÇÃO: cerimônia do ferro — o mentor entrega a arma em nome do chefe
@@ -6488,6 +6532,10 @@ export default function App() {
           }
         }
         if (c.rank === 4 && c.merit >= THRESH[4]) c.final = true;
+        // aviso: mérito pronto, mas o chefe ainda não confia o bastante pra promover
+        if (c.rank < 4 && c.merit >= THRESH[c.rank] && c.attr && c.attr.conf < confReq) {
+          c.log = (c.log ? c.log + "\n" : "") + `⏳ Você tem serviço pra subir, mas ${careerCast(c.mother).boss} ainda não confia o bastante. "Galão não se dá por currículo — se dá por confiança." (falta confiança do chefe)`;
+        }
       }
       // eventos
       // JULGAMENTO DA CORREGEDORIA (campanha): ficha muito suja força a mão do Rocha
@@ -6517,18 +6565,37 @@ export default function App() {
             { l:"Confessar parcialmente e devolver valores", cost:80, fx:{ x:-20 }, r:"Punição administrativa discreta. Sua ficha foi 'limpada' — mas sua imagem sentiu o golpe.", special:"clean" },
           ],
         };
-      } else if (!c.ending && Math.random() < 0.3) {
+      }
+      // V300.4: O CHEFE OBSERVA — evento de confiança (oportunidade ou teste) tem prioridade
+      if (!c.event && !c.ending && c.side === "fc" && c.campfc) {
+        const ce = chiefEvent(c);
+        if (ce) c.event = ce;
+      }
+      if (!c.event && !c.ending && Math.random() < 0.3) {
         const pool = EVENTS.filter(e => e.side === c.side);
         c.event = structuredClone(pool[Math.floor(Math.random() * pool.length)]);
       }
       // V300.3: evolui a investigação em 8 fases antes de decidir a prisão
       if (c.side === "fc") stepInvestigation(c);
       if (!c.ending && c.side === "fc" && ((c.inv8 >= 5 && Math.random() < arrestRisk(c)) || c.heat >= 98)) {
+        // V300.4: a FACÇÃO REAGE. Lealdade alta pode abafar a operação antes da algema.
+        const backing = clamp((c.loyal - 55) / 90 + ((c.attr ? c.attr.infl : 0) / 400), 0, 0.5);
+        if (c.loyal >= 65 && Math.random() < backing) {
+          c.event = null;
+          c.invScore = clamp(c.invScore - 34, 0, 100); c.inv8 = invPhase(c.invScore);
+          c.heat = clamp(c.heat - 26, 0, 100);
+          c.log = `🤝 A operação ia fechar — até um delegado receber a visita certa. ${careerCast(c.mother).boss} não deixa cair quem veste a camisa: as provas 'sumiram' e o mandado virou pó. Você deve essa ao movimento.`;
+          chronPush(c, 2, c.week, `A ${BASE_FAC[c.mother].short} abafou uma operação contra ${c.pname}`, "law");
+        } else {
         c.event = null;
         c.pendingArrest = true;
+        c.factionAbandon = c.loyal <= 22;
         c.invScore = clamp(c.invScore - 28, 0, 100); c.inv8 = invPhase(c.invScore);
         c.heat = clamp(c.heat - 20, 0, 100);
-        c.log = c.inv8 >= 6 ? "🚨 OPERAÇÃO ESPECIAL: dezenas de viaturas, helicóptero, o cerco fechou no seu quarteirão. Mandado na mão." : "🚨 Cercaram o beco. A investigação amadureceu e dessa vez veio com mandado.";
+        c.log = c.factionAbandon
+          ? "🚨 Cercaram o beco — e o telefone da firma não atende. Com a lealdade lá embaixo, você tá por conta própria. A facção não manda advogado pra quem ela não confia."
+          : (c.inv8 >= 6 ? "🚨 OPERAÇÃO ESPECIAL: dezenas de viaturas, helicóptero, o cerco fechou no seu quarteirão. Mandado na mão." : "🚨 Cercaram o beco. A investigação amadureceu e dessa vez veio com mandado.");
+        }
       } else if (!c.ending && c.side === "fc" && c.inv8 >= 3 && c.heat >= 70 && !c.event) {
         c.event = {
           t:"O cerco está fechando: viaturas rondando, perguntas sendo feitas. " + CH.mgr + " sugere resolver.",
@@ -10136,6 +10203,9 @@ export default function App() {
                         {persona !== "Em formação" && (
                           <div className="font-mono mt-2" style={{ fontSize:10, color:C.mut }}>🎭 A quebrada te vê como: <b style={{ color:C.text }}>{persona}</b></div>
                         )}
+                        {(() => { const st = chiefStance(cr); return (
+                          <div className="font-mono mt-1" style={{ fontSize:10, color:C.mut }}>👑 {careerCast(cr.mother).boss}: <b style={{ color:st.cor }}>{st.label}</b></div>
+                        ); })()}
                         {(cr.inv8 || 0) > 0 && (
                           <div className="mt-2 pt-2" style={{ borderTop:`1px solid ${C.line}` }}>
                             <div className="flex justify-between items-center">
