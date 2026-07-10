@@ -5217,6 +5217,113 @@ function nextCampMission(cr) {
     && tier >= (m.act - 1)
   ) || null;
 }
+// ============ F4: CASOS PROCEDURAIS (carreira policial) ============
+// Entre os capítulos da campanha, a semana traz um "caso da delegacia" gerado
+// proceduralmente: [crime × zona × antagonista × complicação], sem repetir a
+// mesma combinação. O id carrega ato+semente (case_<ato>_<seed>) e a missão é
+// regenerada deterministicamente — sobrevive a save/load sem persistir o objeto.
+function caseRng(seed) {
+  let a = seed >>> 0;
+  return function () { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+const CASE_CRIMES = [
+  { n:"Roubo de Carga", icon:"🚚", cena:"um caminhão de eletrônicos sumiu entre o galpão e a rodovia" },
+  { n:"Desmanche", icon:"🔧", cena:"carros roubados entram inteiros num galpão e saem em peças" },
+  { n:"Boca Nova", icon:"🏚", cena:"uma boca abriu a menos de cem metros de uma escola" },
+  { n:"Receptação", icon:"📦", cena:"celulares roubados voltam ao mercado numa loja de fachada" },
+  { n:"Extorsão", icon:"💸", cena:"comerciantes estão pagando 'seguro' pra não fechar as portas" },
+  { n:"Sequestro-Relâmpago", icon:"🚗", cena:"três vítimas na mesma semana, mesmo modus operandi" },
+  { n:"Apostas Clandestinas", icon:"🎲", cena:"uma banca clandestina gira dinheiro grosso no fundo de um bar" },
+  { n:"Carga de Armas", icon:"🔫", cena:"um informante jura que um lote de fuzis cruza a cidade esta semana" },
+  { n:"Assaltos em Série", icon:"💊", cena:"a mesma dupla bateu quatro farmácias em dez dias" },
+  { n:"Grilagem", icon:"🏗", cena:"estão vendendo lotes que não existem em área pública" },
+];
+const CASE_TWISTS = [
+  "A única testemunha tem medo de morrer e só fala em sigilo.",
+  "Um repórter chegou antes de você e o caso já está no jornal.",
+  "O suspeito é afilhado de um vereador — os telefonemas já começaram.",
+  "Metade da papelada 'sumiu' dentro da própria delegacia.",
+  "Um informante oferece o serviço mastigado — por um preço.",
+  "Choveu a semana inteira: perícia comprometida, rastros lavados.",
+  "A vítima mente em algum ponto do depoimento. Falta descobrir qual.",
+  "O caso esbarra numa investigação federal — pise em ovos.",
+];
+const CASE_CACHE = new Map();
+function genCaseMission(id) {
+  const parts = String(id).split("_");
+  const act = Math.max(1, Math.min(5, parseInt(parts[1], 10) || 1));
+  const seed = parseInt(parts[2], 10) || 1;
+  const R = caseRng(seed * 7919 + act);
+  const ci = Math.floor(R() * CASE_CRIMES.length);
+  const crime = CASE_CRIMES[ci];
+  const zi = Math.floor(R() * T_NAMES.length);
+  const facs = ["cs", "fd", "cv"];
+  const f = facs[Math.floor(R() * 3)];
+  const ai = Math.floor(R() * FACTION_MANAGERS[f].length);
+  const temFac = R() < 0.7;
+  const mgr = temFac ? FACTION_MANAGERS[f][ai] : null;
+  const tw = CASE_TWISTS[Math.floor(R() * CASE_TWISTS.length)];
+  const suja = R() < 0.4;
+  const mB = 12 + act * 6, xB = 8 + act * 3, dB = 8 + act * 6;
+  return {
+    id, caso: true, side:"pl", rank:[0, 3],
+    key: `${ci}.${zi}.${temFac ? f + ai : "solo"}`,
+    title: `Caso: ${crime.n} — ${T_NAMES[zi]}`,
+    risk: act >= 4 ? "alto" : act >= 2 ? "médio" : "baixo",
+    pay: `R$ ${Math.round(mB * 1.6 * 0.8)}–${Math.round(mB * 2 * 1.6)} mil`,
+    desc: `${crime.icon} Em ${T_NAMES[zi]}, ${crime.cena}. ${temFac ? `O rastro passa por gente de ${mgr}, do ${BASE_FAC[f].short}. ` : "Nenhuma facção assumiu — por enquanto. "}${tw}`,
+    steps: [
+      { t:"Como você abre o caso?",
+        c:[
+          { l:"Trabalho de formiga: campana, papelada e paciência", p:.8,
+            w:{ t:`Três noites de campana e o quebra-cabeça fechou: rotina anotada, nomes no papel, ${crime.n.toLowerCase()} mapeado de ponta a ponta. Caso sólido.`, m:mB, x:xB + 4, rp:2 },
+            f:{ t:"A campana queimou no segundo dia — alguém avisou. Restou recomeçar com menos tempo e mais olhos em cima.", m:Math.round(mB * 0.4), x:4 } },
+          { l:"Pressão rápida: bater onde dói", p:.6, tag:"gear",
+            w:{ t:`A batida surpresa rendeu flagrante e apreensão. Barulho? Sim. Resultado? Na mesa da ${CAMP_CAST.ivone} no dia seguinte.`, m:Math.round(mB * 1.4), x:xB, rp:1, q:3 },
+            f:{ t:"A pressa derrubou a porta errada. Advogado gritando, vizinhança filmando, suspeito avisado.", m:Math.round(mB * 0.3), x:3, h:-6, q:4 } },
+        ]},
+      { t: suja
+          ? "No fechamento, aparece um intermediário com um envelope: 'aliviando' um nome do relatório, todo mundo sai ganhando. Como você encerra?"
+          : "O caso está maduro. Como você encerra?",
+        c:[
+          { l:"Relatório completo, sem atalhos", p:.75,
+            w:{ t:`Caso fechado no capricho: autuações, cadeia de custódia, elogio no mural.${temFac ? ` ${mgr} vai sentir o aperto.` : ""}`, m:mB, x:xB + 4, rp: act >= 3 ? 3 : 2 },
+            f:{ t:"No fim, faltou uma assinatura e a defesa achou a brecha. O trabalho valeu; o resultado veio pela metade.", m:Math.round(mB * 0.5), x:Math.round(xB * 0.5), rp:1 } },
+          suja
+            ? { l:"Aceitar o 'agrado' e aliviar um nome", p:.9,
+                w:{ t:"O envelope era pesado e a página do relatório, mais leve. Ninguém percebeu. Por enquanto.", m:Math.round(mB * 1.3), x:3, c:1, d:dB },
+                f:{ t:"O 'agrado' veio marcado — quase uma armadilha. Você se livrou por sorte, mas ficou registro em algum lugar.", m:Math.round(mB * 0.5), x:2, c:1, d:Math.round(dB * 0.5), q:4 } }
+            : { l:"Entregar pra promotoria com laço", p:.85,
+                w:{ t:`A ${CAMP_CAST.marta} folheou e sorriu: "Assim que eu gosto." Pontos com a promotoria — e com a sua consciência.`, m:Math.round(mB * 0.8), x:xB + 6, rp:3 },
+                f:{ t:"A promotoria devolveu com ressalvas técnicas. Nada grave — mas o brilho ficou pro mês que vem.", m:Math.round(mB * 0.5), x:Math.round(xB * 0.6), rp:1 } },
+        ]},
+    ],
+  };
+}
+function missionById(id) {
+  const m = MISSIONS.find(x => x.id === id);
+  if (m) return m;
+  if (String(id).startsWith("case_")) {
+    if (!CASE_CACHE.has(id)) CASE_CACHE.set(id, genCaseMission(id));
+    return CASE_CACHE.get(id);
+  }
+  return null;
+}
+// Sorteia um caso novo garantindo que a combinação [crime×zona×antagonista] não repita.
+function genCaseId(cr) {
+  const cp = cr.campaign;
+  if (!cp.caseHist) cp.caseHist = [];
+  for (let t = 0; t < 30; t++) {
+    const id = `case_${cp.act}_${1 + Math.floor(Math.random() * 999999)}`;
+    const m = genCaseMission(id);
+    if (!cp.caseHist.includes(m.key)) {
+      cp.caseHist.push(m.key);
+      if (cp.caseHist.length > 80) cp.caseHist.shift();
+      return id;
+    }
+  }
+  return `case_${cp.act}_${1 + Math.floor(Math.random() * 999999)}`;
+}
 function rollOffers(cr) {
   if (cr.final || cr.jail > 0) return [];
   const corpId = cr.side === "pl" ? CORPS[cr.corp].id : null;
@@ -5227,7 +5334,10 @@ function rollOffers(cr) {
   ).map(m => m.id);
   const rnd = pool.sort(() => Math.random() - 0.5);
   const campM = nextCampMission(cr);
-  if (campM) return [campM.id, ...rnd.slice(0, 2)];
+  // F4: 1 caso procedural por semana na carreira policial (além do capítulo e dos serviços)
+  const caseId = cr.side === "pl" && cr.campaign ? genCaseId(cr) : null;
+  if (campM) return [campM.id, ...(caseId ? [caseId] : []), ...rnd.slice(0, caseId ? 1 : 2)];
+  if (caseId) return [caseId, ...rnd.slice(0, 2)];
   return rnd.slice(0, Math.min(3, pool.length));
 }
 
@@ -5755,7 +5865,7 @@ export default function App() {
 
   function startMission(mid) {
     updateCr(c => {
-      const m = MISSIONS.find(x => x.id === mid);
+      const m = missionById(mid);
       let step = 0;
       if (m.inv) {
         if (!c.invest || c.invest.mid !== mid) c.invest = { mid, stage:0, idle:0 };
@@ -5770,7 +5880,7 @@ export default function App() {
   // Suporta `next` (rota/grafo) e `end`. Usado por chooseOption e pelas mecânicas especiais.
   function applyOutcome(c, out, ok) {
     const sc = c.scene;
-    const mission = MISSIONS.find(m => m.id === sc.mid);
+    const mission = missionById(sc.mid);
     for (const k of ["m","x","h","q","L","c","R","A","rp","d"]) sc.acc[k] += out[k] || 0;
     if (out.flag) Object.assign(sc.acc.flags = sc.acc.flags || {}, out.flag);
     if (out.arrest) sc.acc.arrest = true;
@@ -5794,7 +5904,7 @@ export default function App() {
   function continueScene() {
     updateCr(c => {
       const sc = c.scene;
-      const mis = MISSIONS.find(m => m.id === sc.mid);
+      const mis = missionById(sc.mid);
       if (!sc.ended) { sc.step = (sc.out && sc.out.next != null) ? sc.out.next : sc.step + 1; sc.phase = "prompt"; sc.out = null; return c; }
       if (sc.phase === "outcome") { sc.phase = "summary"; return c; }
       const a = sc.acc;
@@ -5874,7 +5984,7 @@ export default function App() {
   // MECÂNICA PUSH-YOUR-LUCK (Mula): fazer mais uma viagem ou encerrar no lucro.
   function luckTrip(go) {
     updateCr(c => {
-      const sc = c.scene; const mission = MISSIONS.find(m => m.id === sc.mid);
+      const sc = c.scene; const mission = missionById(sc.mid);
       const step = mission.steps[sc.step]; const trip = step.trip || {};
       const trips = sc.trips || 0;
       if (!go) return applyOutcome(c, { t: step.stopText || `Você parou no lucro depois de ${trips} viagem${trips !== 1 ? "s" : ""}. Quem sabe a hora de sair envelhece no corre.` }, true);
@@ -5891,7 +6001,7 @@ export default function App() {
   // MECÂNICA MEMÓRIA (Olheiro): acertou a resposta memorizada?
   function memoryRecall(idx) {
     const sc = cr.scene; if (!sc) return;
-    const mission = MISSIONS.find(m => m.id === sc.mid);
+    const mission = missionById(sc.mid);
     const step = mission.steps[sc.step];
     const ok = step.mem && idx === step.mem.answerIdx;
     setMechTimer(null);
@@ -5906,7 +6016,7 @@ export default function App() {
   // MECÂNICA QTE (Contenção/Segurança): tocar dentro da janela da barra oscilante.
   function qteTap() {
     const sc = cr.scene; if (!sc) return;
-    const mission = MISSIONS.find(m => m.id === sc.mid);
+    const mission = missionById(sc.mid);
     const step = mission.steps[sc.step]; const qte = step.qte || {};
     const period = qte.period || 1400;
     const elapsed = (Date.now() - (qteRef.current.t0 || Date.now())) % period;
@@ -5921,7 +6031,7 @@ export default function App() {
   useEffect(() => {
     const sc = cr && cr.scene;
     if (!sc) return;
-    const mission = MISSIONS.find(m => m.id === sc.mid);
+    const mission = missionById(sc.mid);
     const step = mission && mission.steps[sc.step];
     if (!step) return;
     const isTimer = step.type === "timer" && sc.phase === "prompt";
@@ -9553,7 +9663,7 @@ export default function App() {
 
   // ============ TELA: CARREIRA ============
   if (screen === "career" && cr) {
-    const mission = cr.scene ? MISSIONS.find(m => m.id === cr.scene.mid) : null;
+    const mission = cr.scene ? missionById(cr.scene.mid) : null;
     const finalReady = cr.final && !cr.weekDone;
     return (
       <div className="min-h-screen w-full flex flex-col" style={{ background:C.bg, color:C.text, fontFamily:"system-ui, sans-serif" }}>
@@ -9661,7 +9771,7 @@ export default function App() {
               ) : (
                 <>
                   {cr.invest && (() => {
-                    const mi = MISSIONS.find(m => m.id === cr.invest.mid);
+                    const mi = missionById(cr.invest.mid);
                     if (!mi) return null;
                     return (
                       <Card>
@@ -9708,17 +9818,18 @@ export default function App() {
                     </div>
                   )}
                   {cr.offers.map(id => {
-                    const m = MISSIONS.find(x => x.id === id);
+                    const m = missionById(id);
                     if (!m) return null;
                     return (
                       <Card key={id}>
                         <div className="flex justify-between items-start">
-                          <div className="font-bold text-sm">{m.camp && <span style={{ color:"#D9B25F" }}>📖 </span>}{castText(m.title, cr.mother)}</div>
+                          <div className="font-bold text-sm">{m.camp && <span style={{ color:"#D9B25F" }}>📖 </span>}{m.caso && <span style={{ color:"#5BA0C0" }}>🗂 </span>}{castText(m.title, cr.mother)}</div>
                           <span className="font-mono" style={{ fontSize:10, color: m.risk === "alto" ? C.bad : m.risk === "médio" ? C.warn : C.good }}>
                             risco {m.risk}
                           </span>
                         </div>
                         {m.camp && <div className="font-mono" style={{ fontSize:9, color:"#D9B25F", letterSpacing:"0.08em" }}>CAPÍTULO DA CAMPANHA</div>}
+                        {m.caso && <div className="font-mono" style={{ fontSize:9, color:"#5BA0C0", letterSpacing:"0.08em" }}>CASO DA SEMANA · DELEGACIA</div>}
                         <div className="text-xs mt-1" style={{ color:C.mut }}>{castText(m.desc, cr.mother)}</div>
                         <div className="flex justify-between items-center mt-2">
                           <span className="font-mono" style={{ fontSize:10, color:C.mut }}>{m.pay}</span>
