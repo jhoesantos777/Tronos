@@ -1,5 +1,5 @@
 // TRONOS — Service Worker (cache para jogo offline)
-const CACHE = "tronos-v105-casos-semana";
+const CACHE = "tronos-v106-beco-ao-trono";
 const CORE = [
   "./index.html",
   "./manifest.json",

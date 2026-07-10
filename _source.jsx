@@ -864,6 +864,37 @@ const CAMP_ACTS = [
   { n:4, title:"DINHEIRO SUJO", desc:"Dom Heitor não cai por bala. Siga o dinheiro." },
   { n:5, title:"O CORVO",       desc:"Jordan é um fantasma. Inteligência é a única arma." },
 ];
+// ============ V300: CRIMINAL CAREER ENGINE — "DO BECO AO TRONO" (carreira facção) ============
+// Atos da campanha de facção (avança ao cumprir as missões do ato; após o 5º, MODO TRONO)
+const CAMPFC_ACTS = [
+  null,
+  { n:1, title:"SOBREVIVER",  desc:"Prove que merece permanecer na facção." },
+  { n:2, title:"CONQUISTAR",  desc:"Assuma responsabilidade — e as consequências dela." },
+  { n:3, title:"CONTROLAR",   desc:"Dinheiro, pessoas e influência nas suas mãos." },
+  { n:4, title:"PODER",       desc:"Sobreviva às traições." },
+  { n:5, title:"O TRONO",     desc:"O comando está a um passo. Tome." },
+];
+// V300.1: atributos da carreira criminosa (0-100). Complementam os medidores
+// existentes — Lealdade = cr.loyal, Procurado = cr.heat, Experiência = cr.merit.
+const ATTR_DEF = [
+  ["resp","Respeito"], ["pop","Popularidade"], ["viol","Violência"], ["gan","Ganância"],
+  ["infl","Influência"], ["icrim","Int. Criminal"], ["moral","Moral"], ["conf","Conf. do Chefe"],
+];
+function initAttr() { return { resp:5, pop:10, viol:5, gan:10, infl:0, icrim:5, moral:60, conf:20 }; }
+// Personalidade derivada automaticamente dos atributos — nunca escolhida, sempre consequência.
+function personaOf(cr) {
+  const a = cr.attr || initAttr();
+  const cand = [
+    ["Violento",     a.viol * 1.2 - a.moral * 0.4],
+    ["Estrategista", a.icrim * 1.1 - a.viol * 0.5],
+    ["Manipulador",  a.infl * 1.0 + (60 - a.moral) * 0.3 - a.viol * 0.3],
+    ["Ganancioso",   a.gan * 1.1 - a.pop * 0.3],
+    ["Leal",         (cr.loyal || 50) * 0.7 + a.moral * 0.35 - a.gan * 0.4],
+    ["Frio",         (a.viol + a.icrim) * 0.55 - a.pop * 0.35],
+  ];
+  cand.sort((x, y) => y[1] - x[1]);
+  return cand[0][1] >= 20 ? cand[0][0] : "Em formação";
+}
 
 // ============ CARREIRA v2: "Do Recado ao Trono" ============
 // Escada nova da facção. Os 5 thresholds antigos continuam valendo (mesmo nº de degraus).
@@ -3206,6 +3237,128 @@ MISSIONS.push(
         ]},
     ]},
 );
+// ============ V300 · CAMPANHA FC "DO BECO AO TRONO" — ATO I: SOBREVIVER ============
+// Missões campfc: consequências permanentes (flags), atributos (at:{}) e múltiplos resultados.
+MISSIONS.push(
+  { id:"fca1m1", campfc:true, act:1, side:"fc", rank:[0,4], title:"O Primeiro Corre", risk:"baixo", pay:"R$ 13–21 mil",
+    desc:"{MGR} te mede dos pés à cabeça e entrega uma mochila: \"Da boca do beco até a do Mirante. Sem parar, sem abrir, sem perder. É só um corre — mas todo mundo começa por um.\"",
+    steps:[
+      { type:"timer", time:6, onTimeout:1,
+        t:"Duas rotas até o Mirante: a viela escura (rápida, cega) ou a avenida movimentada (lenta, cheia de olhos). O relógio corre — decide:",
+        c:[
+          { l:"Viela escura — rapidez acima de tudo", p:.65,
+            w:{ t:"Você voou pelo escuro que conhece desde criança. Chegou antes da hora, mochila lacrada. Na boca, só um aceno de respeito.", m:9, x:10, at:{ icrim:3, resp:2 } },
+            f:{ t:"No meio da viela, dois pivetes de outra quebrada armaram o bote. Você escapou — com a mochila mais leve. Primeira lição: escuro esconde os dois lados.", m:3, x:4, h:-8, at:{ resp:-2, icrim:2 }, flag:{ corre_perdeu:true } } },
+          { l:"Avenida — no meio do povo ninguém repara", p:.8,
+            w:{ t:"Blitz na esquina. Você passou reto, cara de quem vai pra escola. O PM olhou através de você. Entrega feita no capricho.", m:8, x:9, at:{ icrim:2, moral:1 } },
+            f:{ t:"Um cliente endividado te reconheceu e apontou pra viatura. Você despachou a mochila no bueiro e correu. Carga perdida — mas ninguém preso.", m:0, x:3, q:6, at:{ icrim:1 }, flag:{ corre_perdeu:true } } },
+        ]},
+      { t:"De volta, {MGR} pergunta como foi — e a quebrada inteira parece ouvir a resposta.",
+        c:[
+          { l:"Contar tudo, inclusive o que deu errado", p:.9,
+            w:{ t:"\"Cria que mente pra mim não dura uma semana.\" {MGR} balançou a cabeça devagar: honestidade na conta certa. Primeiro corre, primeira confiança.", x:8, L:4, at:{ conf:6, moral:3, resp:2 } },
+            f:{ t:"Você contou tudo — na frente de gente demais. {MGR} não gostou da plateia. \"Verdade se fala no ouvido, não no alto-falante.\"", x:4, L:2, at:{ conf:2, icrim:1 } } },
+          { l:"Enfeitar a história pra parecer maior", p:.55,
+            w:{ t:"Você pintou o corre como epopeia. Os pivetes ouviram de boca aberta. {MGR} fingiu acreditar — por ora, a lenda te serve.", x:10, at:{ resp:4, infl:3, moral:-3 } },
+            f:{ t:"{MGR} tinha um olheiro no trajeto e sabia de cada passo. \"Na próxima, mente melhor — ou não mente.\" A mentira custou caro.", x:2, L:-4, at:{ conf:-6, moral:-2 } } },
+        ]},
+    ]},
+  { id:"fca1m2", campfc:true, act:1, side:"fc", rank:[0,4], requires:["fca1m1"], title:"A Primeira Cobrança", risk:"médio", pay:"R$ 16–32 mil",
+    desc:"Seu Waldemar, dono do mercadinho, atrasou dois meses da taxa. {MGR} te manda resolver: \"Volta com o dinheiro ou com um motivo. De preferência o dinheiro.\"",
+    steps:[
+      { t:"Seu Waldemar te recebe suando, a mão tremendo na caixa registradora. A filha dele espia do estoque. Como você cobra?",
+        c:[
+          { l:"Negociar: parcelar o atraso, juros de respeito", p:.8,
+            w:{ t:"Você fez a conta na frente dele: metade agora, metade na sexta, sem 'multa'. O velho quase chorou de alívio — e pagou adiantado na sexta. Na quebrada, palavra vale mais que medo.", m:10, x:10, at:{ icrim:4, moral:4, pop:4, infl:2, viol:0 }, flag:{ waldemar_aliado:true } },
+            f:{ t:"O velho aceitou o acordo — e sumiu no dia seguinte com a família. Loja vazia, dívida no vento. {MGR} não disse nada. O silêncio doeu mais.", m:0, x:3, at:{ conf:-4, resp:-3, icrim:2 } } },
+          { l:"Intimidar: derrubar uma prateleira e sorrir", p:.75,
+            w:{ t:"O barulho do vidro respondeu antes dele. Seu Waldemar pagou tudo, contando nota por nota com a mão trêmula. A filha te olhou de um jeito que você vai demorar pra esquecer.", m:14, x:10, at:{ viol:4, resp:4, pop:-3, moral:-3 } },
+            f:{ t:"O velho endureceu: \"Quebra tudo então, moleque. Não tenho.\" Você saiu com metade e a sensação de ter batido em poço seco.", m:6, x:4, at:{ viol:3, resp:-2, pop:-2 } } },
+          { l:"Agredir: a mão na cara pra aprender", p:.7,
+            w:{ t:"O tapa ecoou na loja vazia. Ele pagou tudo, no chão, catando as notas. Você saiu com o dinheiro e com um nó no estômago que a grana não desfez. A rua inteira soube em uma hora.", m:16, x:8, q:5, at:{ viol:8, resp:5, pop:-6, moral:-6 }, flag:{ waldemar_humilhado:true } },
+            f:{ t:"A filha filmou da porta do estoque. O vídeo rodou os grupos da quebrada antes de você chegar na esquina. Dinheiro no bolso, nome na lama.", m:12, x:4, q:9, at:{ viol:8, resp:2, pop:-10, moral:-6 }, flag:{ waldemar_humilhado:true, video_agressao:true } } },
+          { l:"Executar a ameaça máxima: encostar o ferro", p:.6,
+            w:{ t:"Você nem tinha ferro — encostou o dedo por dentro do casaco e o velho pagou até o que não devia. Blefe gelado. {MGR} ouviu a história e riu: \"Esse aí vai longe... ou vai preso.\"", m:20, x:10, q:8, at:{ viol:10, resp:7, gan:4, moral:-8, pop:-6 }, flag:{ waldemar_traumatizado:true } },
+            f:{ t:"O velho teve um mal súbito na sua frente. Ambulância, vizinhança na porta, seu nome correndo de boca em boca. Ele sobreviveu — sua reputação com a comunidade, não.", m:8, x:2, q:14, at:{ viol:10, resp:-4, pop:-12, moral:-10 }, flag:{ waldemar_traumatizado:true } } },
+        ]},
+    ]},
+  { id:"fca1m3", campfc:true, act:1, side:"fc", rank:[0,4], requires:["fca1m2"], title:"Favela Observa", risk:"baixo", pay:"R$ 8–24 mil",
+    desc:"O chefe mandou descer cestas básicas e botijões pra comunidade — véspera de eleição do respeito. {MGR} te dá a lista e a chave do paiol: \"Cada casa da lista. E cada olho da favela vai estar em você.\"",
+    steps:[
+      { t:"No paiol, você conta: sobram quatro cestas além da lista e ninguém conferiu. A favela observa — mas não enxerga tudo.",
+        c:[
+          { l:"Entregar tudo, casa por casa, com bom dia", p:.85,
+            w:{ t:"Dona Cida te abraçou na porta. O menino do 43 te chamou de 'senhor'. No fim do dia a quebrada inteira sabia seu nome — pelo motivo certo. Isso não tem preço. Tem consequência.", m:5, x:10, L:4, at:{ pop:10, moral:5, resp:3, infl:3, gan:-2 }, flag:{ querido_na_favela:true } },
+            f:{ t:"Duas famílias da lista tinham se mudado e sobrou cesta na mão. Você improvisou entregando a quem gritou mais alto — e quem não ganhou reclamou mais alto ainda. Boa intenção, execução torta.", m:3, x:6, at:{ pop:4, moral:3 } } },
+          { l:"Desviar as quatro que sobram — ninguém conferiu", p:.7,
+            w:{ t:"As quatro cestas viraram dinheiro no atacadão do bairro vizinho. A lista foi cumprida, o caixa pessoal engordou, ninguém sentiu falta. Por enquanto.", m:14, x:6, at:{ gan:7, icrim:3, moral:-5, pop:2 }, flag:{ desviou_cestas:true } },
+            f:{ t:"O atacadista era primo de um olheiro. A história chegou em {MGR} antes de você. \"Da boca do chefe pra tua mão, e da tua mão pro teu bolso?\" A multa foi o dobro do lucro.", m:-10, x:2, L:-6, at:{ gan:7, conf:-8, resp:-4, moral:-4 }, flag:{ desviou_cestas:true, pego_desviando:true } } },
+          { l:"Desviar metade da carga inteira — grande demais pra notarem", p:.5,
+            w:{ t:"Metade da carga sumiu no caminho e virou um maço grosso no seu bolso. As famílias que receberam agradeceram; as que não receberam culparam 'a logística'. Você aprendeu que a fome dos outros também é mercado. Que isso te assombre depois.", m:26, x:4, at:{ gan:12, moral:-10, pop:-4, icrim:4 }, flag:{ roubou_comunidade:true } },
+            f:{ t:"Dona Cida foi na boca perguntar do botijão dela — na frente do chefe. O silêncio que desceu naquela laje você vai lembrar a vida toda. Devolveu tudo, com juros, e o apelido ficou: 'o rato das cestas'.", m:-16, x:0, L:-10, at:{ gan:10, moral:-8, pop:-14, resp:-8, conf:-10 }, flag:{ roubou_comunidade:true, rato_das_cestas:true } } },
+        ]},
+    ]},
+  // O X9 — a engine decide se o informante existe (semente da campanha); duas variantes do capítulo
+  { id:"fca1m4a", campfc:true, act:1, side:"fc", rank:[0,4], requires:["fca1m3"], reqFlags:{ x9_existe:true }, title:"O X9", risk:"alto", pay:"R$ 16–40 mil",
+    desc:"Três entregas caíram em duas semanas, sempre com blitz esperando. {MGR} fecha a porta do barraco: \"Tem rato na laje. Descobre quem é — e me traz certeza, não desconfiança.\"",
+    steps:[
+      { type:"memory",
+        t:"Você cruza os horários das quedas com quem sabia de cada rota. Grave quem sabia de TODAS:",
+        mem:{ show:5, showItems:["Pardal · rotas 1 e 3","Careca · rotas 1, 2 e 3","Nino · rota 2"], question:"Quem sabia das três rotas que caíram?", options:["Pardal","Careca","Nino","Todos sabiam"], answerIdx:1 },
+        w:{ t:"Careca. Só ele sabia das três. Você refez o caminho dele: duas ligações por semana pro mesmo número frio, sempre véspera de queda. Certeza — como {MGR} pediu.", m:12, x:12, at:{ icrim:8, resp:3 }, flag:{ x9_descoberto:true } },
+        f:{ t:"Você apontou o nome errado na primeira análise e quase queimou um inocente. Refez tudo do zero até a certeza: Careca. A lição custou tempo — e quase custou uma vida.", m:6, x:6, at:{ icrim:4, moral:-2 }, flag:{ x9_descoberto:true } } },
+      { t:"Careca é o X9 — confirmado. Ele tem mulher grávida e deve três meses de aluguel. A palavra final é sua antes de subir pro {MGR}.",
+        c:[
+          { l:"Entregar pro {MGR} — a casa resolve como sempre resolveu", p:1,
+            w:{ t:"Você entregou o nome e não perguntou o resto. Careca 'se mudou' da noite pro dia. A quebrada entendeu o recado; {MGR} entendeu que pode confiar. Dormir é que custa um pouco mais.", m:16, x:12, L:6, at:{ conf:10, resp:6, moral:-6, viol:3 }, flag:{ x9_entregue:true } } },
+          { l:"Avisar Careca pra sumir antes da queda", p:.75,
+            w:{ t:"\"Some hoje. Leva ela. Não volta.\" Careca chorou, jurou dívida eterna e evaporou. {MGR} estranhou o rato ter fugido — e você engoliu o segredo. Um dia essa dívida volta — pra te salvar ou te enterrar.", x:6, at:{ moral:8, icrim:2, conf:-4 }, flag:{ x9_fugiu:true, divida_careca:true } },
+            f:{ t:"Careca fugiu — mas deixou bilhete pra mulher, e o bilhete vazou. {MGR} sabe que alguém avisou. Não sabe quem. Os olhos dele agora pesam em todo mundo — inclusive em você.", x:2, L:-4, at:{ moral:6, conf:-8 }, flag:{ x9_fugiu:true, suspeita_sobre_voce:true } } },
+          { l:"Virar o jogo: usar o Careca como duplo contra a polícia", p:.6,
+            w:{ t:"Você apertou Careca na parede e ofereceu a única saída: continuar passando informação — só que agora, a SUA informação. A polícia passou a receber rota falsa. Xadrez de gente grande.", m:10, x:14, at:{ icrim:10, infl:6, moral:-4 }, flag:{ x9_duplo:true } },
+            f:{ t:"Careca aceitou tremendo — e tremendo contou pro delegado no dia seguinte. Agora a polícia sabe que você sabe. O jogo duplo virou espelho duplo, e você está no meio.", x:4, q:10, at:{ icrim:4, moral:-4 }, flag:{ x9_duplo:true, policia_alerta:true } } },
+        ]},
+    ]},
+  { id:"fca1m4b", campfc:true, act:1, side:"fc", rank:[0,4], requires:["fca1m3"], reqFlags:{ x9_existe:false }, title:"O X9", risk:"alto", pay:"R$ 16–40 mil",
+    desc:"Três entregas caíram em duas semanas, sempre com blitz esperando. {MGR} fecha a porta do barraco: \"Tem rato na laje. Descobre quem é — e me traz certeza, não desconfiança.\"",
+    steps:[
+      { type:"memory",
+        t:"Você cruza os horários das quedas com quem sabia de cada rota. Grave quem sabia de TODAS:",
+        mem:{ show:5, showItems:["Pardal · rotas 1 e 3","Careca · rotas 1 e 2","Nino · rotas 2 e 3"], question:"Quem sabia das três rotas que caíram?", options:["Pardal","Careca","Nino","Ninguém sabia das três"], answerIdx:3 },
+        w:{ t:"Ninguém sabia das três. Você refez o mapa e achou o padrão de verdade: uma câmera nova da prefeitura varrendo a esquina das rotas. Não tem rato — tem lente. Frieza pra enxergar o óbvio que ninguém viu.", m:14, x:14, at:{ icrim:10, resp:3 }, flag:{ x9_inexistente:true } },
+        f:{ t:"A pressa quase te fez apontar o Pardal — que era inocente. No segundo passe, a verdade: uma câmera nova na esquina, nenhum rato. Você chegou lá, mas tropeçando.", m:6, x:6, at:{ icrim:5 }, flag:{ x9_inexistente:true } } },
+      { t:"Não existe X9 — é vigilância nova da polícia. Mas {MGR} espera um NOME, e meia quebrada já aposta em alguém. O que você leva pra ele?",
+        c:[
+          { l:"A verdade com prova: é câmera, não rato", p:.85,
+            w:{ t:"Você subiu com foto da câmera, mapa das rotas e a solução: mudar os horários. {MGR} olhou longamente: \"Todo mundo queria um culpado. Você trouxe a resposta.\" Confiança não se pede — se constrói assim.", m:16, x:14, L:6, at:{ conf:12, icrim:6, moral:6, resp:4 }, flag:{ verdade_camera:true } },
+            f:{ t:"A verdade era boa, mas a apresentação foi fraca — metade da boca continuou achando que tem rato. {MGR} aceitou sua tese com um pé atrás. Faltou convencer, não descobrir.", m:8, x:8, at:{ conf:4, icrim:4, moral:4 } } },
+          { l:"Inventar um culpado — a quebrada precisa de um nome", p:.5,
+            w:{ t:"Você apontou um viciado sem padrinho que ninguém defenderia. Ele 'foi convidado a se mudar'. A paz voltou, as rotas mudaram, ninguém questionou. Só você sabe o preço exato dessa paz.", m:12, x:8, at:{ infl:6, icrim:4, moral:-12, viol:2 }, flag:{ inocente_acusado:true } },
+            f:{ t:"O 'culpado' tinha um primo na contenção — e o primo foi atrás da verdade. A câmera apareceu, sua mentira também. {MGR} não esqueceu: \"Preferiu me agradar a me servir.\"", x:2, L:-8, at:{ conf:-12, moral:-10, resp:-4 }, flag:{ inocente_acusado:true, mentira_exposta:true } } },
+        ]},
+    ]},
+  { id:"fca1m5", campfc:true, act:1, side:"fc", rank:[0,4], requires:["fca1m3"], title:"Batismo de Fogo", risk:"altíssimo", pay:"R$ 24–49 mil",
+    desc:"Sábado, 23h: gente de outra quebrada desce pra tomar a boca do beco. {MGR} distribui os postos e te entrega um ferro emprestado: \"Hoje você vira o que decidir virar. Cebolinha cobre teu lado.\"",
+    steps:[
+      { type:"qte", tag:"arma",
+        t:"Os faróis apagam no pé do morro. Sombras subindo pela viela. Cebolinha prende a respiração do teu lado. TOQUE no momento exato de dar o alarme:",
+        qte:{ window:[0.40,0.62], period:1300,
+          w:{ t:"No segundo exato: o apito, as luzes, a contenção fechando a viela. Eles subiram numa armadilha armada por você. Recuaram sem levar um palmo.", m:18, x:14, at:{ viol:4, resp:6, icrim:4 } },
+          f:{ t:"Você travou meio segundo — e meio segundo no morro é uma vida. Eles furaram a primeira linha e o tiroteio começou desorganizado, com a boca em desvantagem.", m:8, x:6, h:-10, at:{ viol:4, resp:2 } } } },
+      { t:"No meio do fogo cruzado, Cebolinha toma um tiro de raspão e cai no valão, gritando teu nome. A viela ainda cospe chumbo. Decide AGORA:",
+        c:[
+          { l:"Voltar e arrastar o Cebolinha pra cobertura", p:.7,
+            w:{ t:"Você voltou no meio do chumbo e arrastou o moleque pelo colete. Ele vai mancar a vida toda — e contar essa história a vida toda. Na quebrada, quem volta pra buscar os seus nunca mais anda sozinho.", m:12, x:14, L:6, h:-12, at:{ resp:10, moral:8, conf:6, pop:5, viol:2 }, flag:{ salvou_cebolinha:true } },
+            f:{ t:"Você voltou — e um segundo tiro te pegou de raspão também. Os dois saíram do valão sangrando, um segurando o outro. Feio, lento, quase fatal. Mas saíram JUNTOS. A cicatriz virou credencial.", m:8, x:10, L:6, h:-24, at:{ resp:8, moral:8, conf:4, viol:2 }, flag:{ salvou_cebolinha:true, cicatriz_batismo:true } } },
+          { l:"Seguir atirando — a boca vem primeiro", p:.75,
+            w:{ t:"Você segurou a posição e a linha não caiu. A boca resistiu. Cebolinha saiu do valão sozinho, mancando — e não te olhou na cara. \"A boca vem primeiro\", disse {MGR} te dando o crédito. O crédito pesa no bolso. O olhar do moleque pesa em outro lugar.", m:20, x:12, at:{ viol:6, resp:5, moral:-8, conf:4 }, flag:{ abandonou_cebolinha:true } },
+            f:{ t:"Você priorizou a linha — e ela caiu mesmo assim. A boca perdeu a noite, e Cebolinha saiu do valão jurando nunca mais cobrir teu lado. Perdeu dos dois jeitos.", m:6, x:4, L:-4, h:-8, at:{ viol:5, moral:-8, resp:-3 }, flag:{ abandonou_cebolinha:true } } },
+          { l:"Fugir pelo valão — essa guerra não é sua", p:.8,
+            w:{ t:"Você desceu o valão no escuro e sumiu antes da terceira rajada. Vivo, inteiro, invisível. Na segunda-feira, os olhares na boca diziam o que ninguém falou: covarde vivo ainda é covarde. Recomeçar respeito custa caro.", m:0, x:2, q:-4, at:{ resp:-12, viol:-4, moral:-4, conf:-10 }, flag:{ fugiu_batismo:true } },
+            f:{ t:"Fugindo pelo valão você deu de cara com dois invasores fazendo o mesmo caminho. Trocou tiro correndo, levou raspão, e ainda chegou em casa com fama de fujão. O pior dos dois mundos.", m:0, x:2, h:-16, at:{ resp:-10, viol:2, moral:-4, conf:-8 }, flag:{ fugiu_batismo:true } } },
+        ]},
+    ]},
+);
 // ---------- MISSÕES ADICIONAIS (v9 — progressão mais longa) ----------
 MISSIONS.push(
   // PM — patrulha
@@ -5179,11 +5332,15 @@ function initStrategy(opts) {
 function initCareer(side, mother, pname) {
   return {
     side, mother: mother || null, pname: pname || "Cria",
-    corp:0, rank:0, merit:0, cash:40, hp:100, heat:5, loyal:50, corr:0, rep:50, week:1,
+    corp:0, rank:0, merit:0, cash: side === "fc" ? 10 : 40, hp:100, heat:5, loyal:50, corr:0, rep:50, week:1,
     riv:0, ally:0, jail:0, invest:null, advInv:false, pendingArrest:false, pendingProcess:false, lawyerPick:null, transfer:null,
     gear:{ vest:false, gear:false, agil:false, arma:false },
     assets:{ car:false, house:false },
     biz:{ b1:false, b2:false, b3:false },
+    // V300: atributos + campanha "Do Beco ao Trono" (só facção). A semente decide
+    // segredos da campanha (ex.: se o X9 existe) — cada carreira é diferente.
+    attr: side === "fc" ? initAttr() : null,
+    campfc: side === "fc" ? (() => { const seed = 1 + Math.floor(Math.random() * 999999); return { act:1, done:[], flags:{ x9_existe: caseRng(seed)() < 0.55 }, seed }; })() : null,
     // Campanha "Porto Esperança Confidencial" (só polícia): atos, flags de enredo e caixa dois
     campaign: side === "pl" ? { act:1, done:[], flags:{}, dirty:0, hist:[], bosses:[], epilogue:null } : null,
     contasAtraso: 0,
@@ -5202,6 +5359,9 @@ function migrateCareer(cr) {
   if (cr.gear.arma == null) cr.gear.arma = cr.side === "fc" && cr.rank >= 3; // Contenção+ já tem o ferro
   if (cr.side === "pl" && !cr.campaign) cr.campaign = { act:1, done:[], flags:{}, dirty:0, hist:[], bosses:[], epilogue:null };
   if (cr.contasAtraso == null) cr.contasAtraso = 0;
+  // V300: saves de facção antigos ganham atributos e a campanha "Do Beco ao Trono"
+  if (cr.side === "fc" && !cr.attr) cr.attr = initAttr();
+  if (cr.side === "fc" && !cr.campfc) { const seed = 1 + Math.floor(Math.random() * 999999); cr.campfc = { act: Math.max(1, Math.min(5, cr.rank + 1)), done:[], flags:{ x9_existe: caseRng(seed)() < 0.55 }, seed }; }
   return cr;
 }
 // Próxima missão da campanha policial: respeita ato, encadeamento (requires),
@@ -5215,6 +5375,18 @@ function nextCampMission(cr) {
     && (m.requires || []).every(r => cp.done.includes(r))
     && (!m.reqFlags || Object.entries(m.reqFlags).every(([k, v]) => !!cp.flags[k] === !!v))
     && tier >= (m.act - 1)
+  ) || null;
+}
+// V300: próximo capítulo da campanha de facção "Do Beco ao Trono" (espelha a lógica policial;
+// o ritmo acompanha a patente — ato N pede rank >= N-1)
+function nextCampMissionFC(cr) {
+  if (cr.side !== "fc" || !cr.campfc) return null;
+  const cp = cr.campfc;
+  return MISSIONS.find(m => m.campfc && m.act === cp.act
+    && !cp.done.includes(m.id)
+    && (m.requires || []).every(r => cp.done.includes(r))
+    && (!m.reqFlags || Object.entries(m.reqFlags).every(([k, v]) => !!cp.flags[k] === !!v))
+    && cr.rank >= (m.act - 1)
   ) || null;
 }
 // ============ F4: CASOS PROCEDURAIS (carreira policial) ============
@@ -5327,13 +5499,13 @@ function genCaseId(cr) {
 function rollOffers(cr) {
   if (cr.final || cr.jail > 0) return [];
   const corpId = cr.side === "pl" ? CORPS[cr.corp].id : null;
-  const pool = MISSIONS.filter(m => !m.camp && m.side === cr.side
+  const pool = MISSIONS.filter(m => !m.camp && !m.campfc && m.side === cr.side
     && (cr.side === "fc" || (m.corp || "pm") === corpId)
     && cr.rank >= m.rank[0] && cr.rank <= m.rank[1]
     && !(m.inv && cr.invest)
   ).map(m => m.id);
   const rnd = pool.sort(() => Math.random() - 0.5);
-  const campM = nextCampMission(cr);
+  const campM = cr.side === "fc" ? nextCampMissionFC(cr) : nextCampMission(cr);
   // F4: 1 caso procedural por semana na carreira policial (além do capítulo e dos serviços)
   const caseId = cr.side === "pl" && cr.campaign ? genCaseId(cr) : null;
   if (campM) return [campM.id, ...(caseId ? [caseId] : []), ...rnd.slice(0, caseId ? 1 : 2)];
@@ -5883,6 +6055,8 @@ export default function App() {
     const mission = missionById(sc.mid);
     for (const k of ["m","x","h","q","L","c","R","A","rp","d"]) sc.acc[k] += out[k] || 0;
     if (out.flag) Object.assign(sc.acc.flags = sc.acc.flags || {}, out.flag);
+    // V300: deltas de atributos criminais (at:{resp,viol,...}) acumulam na cena
+    if (out.at) { sc.acc.at = sc.acc.at || {}; for (const k of Object.keys(out.at)) sc.acc.at[k] = (sc.acc.at[k] || 0) + out.at[k]; }
     if (out.arrest) sc.acc.arrest = true;
     sc.out = { text: out.t, ok, next: out.next != null ? out.next : null };
     sc.phase = "outcome";
@@ -5946,6 +6120,25 @@ export default function App() {
             else if (soltos >= 2 || cp.dirty >= 300) c.ending = "sec_sombra";
             else c.ending = "coronel_reformado";
             chronPush(c, 1, c.week, `Os três tronos de Porto Esperança caíram — presos ${presos}, fugidos ${soltos}`, "win");
+          }
+        }
+      }
+      // V300: carreira facção — atributos, flags de enredo e progressão de ato "Do Beco ao Trono"
+      if (c.side === "fc" && c.campfc) {
+        const cp = c.campfc;
+        if (a.at && c.attr) for (const [k, v] of Object.entries(a.at)) if (k in c.attr) c.attr[k] = clamp(c.attr[k] + v, 0, 100);
+        if (a.flags && Object.keys(a.flags).length) Object.assign(cp.flags, a.flags);
+        if (mis.campfc && !cp.done.includes(mis.id)) {
+          cp.done.push(mis.id);
+          chronPush(c, 1, c.week, `Capítulo cumprido: ${mis.title}`, "miss");
+          const restantes = MISSIONS.filter(m => m.campfc && m.act === cp.act && !cp.done.includes(m.id)
+            && (!m.reqFlags || Object.entries(m.reqFlags).every(([k, v]) => !!cp.flags[k] === !!v)));
+          if (!restantes.length && cp.act < 5) {
+            const antigo = CAMPFC_ACTS[cp.act];
+            cp.act += 1;
+            const novo = CAMPFC_ACTS[cp.act];
+            c.log = (c.log ? c.log + "\n" : "") + `📖 FIM DO ATO ${antigo.n} — ${antigo.title}. Começa o ATO ${novo.n}: ${novo.title} — ${novo.desc}`;
+            chronPush(c, 1, c.week, `Ato ${antigo.n} (${antigo.title}) vencido — começa ${novo.title}`, "promo");
           }
         }
       }
@@ -9811,6 +10004,31 @@ export default function App() {
                       </Card>
                     );
                   })()}
+                  {/* V300: cabeçalho do ato — campanha de facção "Do Beco ao Trono" */}
+                  {cr.side === "fc" && cr.campfc && CAMPFC_ACTS[cr.campfc.act] && (() => {
+                    const ato = CAMPFC_ACTS[cr.campfc.act];
+                    const atoMs = MISSIONS.filter(m => m.campfc && m.act === cr.campfc.act
+                      && (!m.reqFlags || Object.entries(m.reqFlags).every(([k, v]) => !!cr.campfc.flags[k] === !!v)));
+                    const feitas = atoMs.filter(m => cr.campfc.done.includes(m.id)).length;
+                    const persona = personaOf(cr);
+                    return (
+                      <Card>
+                        <div className="flex justify-between items-center">
+                          <div className="font-mono font-bold" style={{ fontSize:11, color:sideColor, letterSpacing:"0.08em" }}>📖 ATO {ato.n} — {ato.title}</div>
+                          <span className="font-mono" style={{ fontSize:10, color:C.mut }}>{feitas}/{atoMs.length}</span>
+                        </div>
+                        <div className="text-xs mt-1" style={{ color:C.mut, fontStyle:"italic" }}>{ato.desc}</div>
+                        <div className="flex gap-1 mt-2">
+                          {atoMs.map(m => (
+                            <span key={m.id} style={{ flex:1, height:4, borderRadius:99, background: cr.campfc.done.includes(m.id) ? sideColor : "#232a3a" }} />
+                          ))}
+                        </div>
+                        {persona !== "Em formação" && (
+                          <div className="font-mono mt-2" style={{ fontSize:10, color:C.mut }}>🎭 A quebrada te vê como: <b style={{ color:C.text }}>{persona}</b></div>
+                        )}
+                      </Card>
+                    );
+                  })()}
                   <div className="font-mono" style={{ fontSize:10, color:C.mut, letterSpacing:"0.1em" }}>SERVIÇOS DISPONÍVEIS</div>
                   {cr.hp < 40 && (
                     <div className="font-mono text-xs rounded-lg p-2" style={{ background:C.panel2, color:C.bad }}>
@@ -9823,12 +10041,13 @@ export default function App() {
                     return (
                       <Card key={id}>
                         <div className="flex justify-between items-start">
-                          <div className="font-bold text-sm">{m.camp && <span style={{ color:"#D9B25F" }}>📖 </span>}{m.caso && <span style={{ color:"#5BA0C0" }}>🗂 </span>}{castText(m.title, cr.mother)}</div>
+                          <div className="font-bold text-sm">{(m.camp || m.campfc) && <span style={{ color:"#D9B25F" }}>📖 </span>}{m.caso && <span style={{ color:"#5BA0C0" }}>🗂 </span>}{castText(m.title, cr.mother)}</div>
                           <span className="font-mono" style={{ fontSize:10, color: m.risk === "alto" ? C.bad : m.risk === "médio" ? C.warn : C.good }}>
                             risco {m.risk}
                           </span>
                         </div>
                         {m.camp && <div className="font-mono" style={{ fontSize:9, color:"#D9B25F", letterSpacing:"0.08em" }}>CAPÍTULO DA CAMPANHA</div>}
+                        {m.campfc && <div className="font-mono" style={{ fontSize:9, color:"#D9B25F", letterSpacing:"0.08em" }}>DO BECO AO TRONO · CAPÍTULO</div>}
                         {m.caso && <div className="font-mono" style={{ fontSize:9, color:"#5BA0C0", letterSpacing:"0.08em" }}>CASO DA SEMANA · DELEGACIA</div>}
                         <div className="text-xs mt-1" style={{ color:C.mut }}>{castText(m.desc, cr.mother)}</div>
                         <div className="flex justify-between items-center mt-2">
@@ -9882,6 +10101,32 @@ export default function App() {
                   <div className="font-mono mt-2" style={{ fontSize:11, color:C.mut }}>
                     Lealdade ao {BASE_FAC[cr.mother].short}: <b style={{ color: cr.loyal >= 50 ? C.good : C.warn }}>{cr.loyal}/100</b>
                     <span style={{ fontSize:10 }}> — define se você pode herdar o trono.</span>
+                  </div>
+                )}
+                {cr.side === "fc" && cr.attr && (
+                  <div className="mt-3 pt-2" style={{ borderTop:`1px solid ${C.line}` }}>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-mono font-bold" style={{ fontSize:10, letterSpacing:"0.1em", color:C.text }}>QUEM VOCÊ ESTÁ VIRANDO</span>
+                      <span className="font-mono rounded px-2 py-0.5" style={{ fontSize:10, background:`${sideColor}22`, color:sideColor, border:`1px solid ${sideColor}66` }}>🎭 {personaOf(cr)}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                      {ATTR_DEF.map(([k, label]) => {
+                        const v = cr.attr[k] || 0;
+                        const cor = k === "moral" ? (v >= 50 ? C.good : C.bad) : k === "viol" || k === "gan" ? (v >= 60 ? C.bad : C.text) : v >= 60 ? C.good : C.text;
+                        return (
+                          <div key={k}>
+                            <div className="flex justify-between">
+                              <span className="font-mono" style={{ fontSize:9, color:C.mut }}>{label}</span>
+                              <span className="font-mono font-bold" style={{ fontSize:9, color:cor }}>{v}</span>
+                            </div>
+                            <div style={{ height:3, background:"#232a3a", borderRadius:99, overflow:"hidden" }}>
+                              <div style={{ width:`${v}%`, height:"100%", background:cor, opacity:.8 }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="font-mono mt-2" style={{ fontSize:9, color:C.mut }}>Personalidade é consequência: cada decisão nas missões move esses medidores — e eles mudam como a quebrada te trata.</div>
                   </div>
                 )}
                 {cr.side === "pl" && cr.corr > 0 && (
