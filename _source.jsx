@@ -3020,6 +3020,192 @@ MISSIONS.push(
         ]},
     ]},
 );
+// ============ ATO 4: DINHEIRO SUJO (rank 2-3) — a queda de Dom Heitor (método: financeiro) ============
+MISSIONS.push(
+  { id:"a4m1", camp:true, act:4, side:"pl", rank:[0,3], title:"Siga o Dinheiro", risk:"médio", pay:"R$ 65–113 mil",
+    desc:`Dom Heitor Vasconcelos, patriarca da Falange D'Ouro, nunca tocou numa arma. Ele lava. A ${CAMP_CAST.marta} abre uma pasta grossa: "Esse não cai por bala, colega. Cai por planilha. E planilha é o meu terreno. Bora montar a força-tarefa financeira."`,
+    steps:[
+      { t:"O dinheiro da Falange entra limpo por dezenas de fachadas. Por onde você começa a puxar o fio?",
+        c:[
+          { l:"Mapear as empresas de fachada pelo cartório", p:.8,
+            w:{ t:"Noites lendo contratos sociais até os sócios 'laranja' se repetirem. Um mesmo endereço registrava 14 empresas. O labirinto começou a ter um mapa.", m:26, x:16, rp:4 },
+            f:{ t:"Os registros estavam blindados por camadas de holdings no exterior. Você bateu num muro de papel — e a Falange percebeu o interesse.", m:12, x:8 } },
+          { l:"Infiltrar a força-tarefa num banco parceiro", p:.65, tag:"gear",
+            w:{ t:"Com mandado, você sentou dentro do banco e viu as transações em tempo real. Padrões de lavagem saltando na tela. Ouro contábil.", m:22, x:18, rp:5, q:4 },
+            f:{ t:"O gerente do banco era homem da Falange e adulterou os extratos antes da sua chegada. Você viu o que quiseram te mostrar.", m:10, x:6, q:6 } },
+        ]},
+      { t:"Um analista da força-tarefa te chama baixinho: 'Achei uma conta que não devia existir. Mas se a gente 'esquecer' um zero, sobra pra nós dois. Ninguém confere isso aqui.'",
+        c:[
+          { l:"Reportar a conta E o analista", p:.8,
+            w:{ t:"Você levou a descoberta E a proposta ao chefe. O analista foi afastado, a conta virou prova-chave. Sua integridade virou referência na força-tarefa.", x:16, rp:6 },
+            f:{ t:"O analista negou tudo e te pintou como paranoico. Ficou a palavra de um contra a do outro — e a conta 'sumiu' no meio da confusão.", x:6, R:1 } },
+          { l:"'Esquecer o zero' e dividir com o analista", p:.6,
+            w:{ t:"Sumiu um zero, sumiu meio milhão — pra vocês dois. A auditoria não pegou. Você agora tem um cúmplice de farda e um segredo a mais na ficha.", m:40, x:6, c:2, d:60, flag:{ analista_cumplice:true } },
+            f:{ t:"A trilha do 'zero esquecido' era rastreável. O analista entregou você no primeiro aperto. Rombo na ficha e uma testemunha contra você.", m:20, c:3, d:60, q:6, flag:{ analista_cumplice:true } } },
+        ]},
+    ]},
+  { id:"a4m2", camp:true, act:4, side:"pl", rank:[0,3], requires:["a4m1"], title:"Caixa Dentro do Caixa", risk:"médio", pay:"R$ 57–97 mil",
+    desc:`A contabilidade da Falange é uma boneca russa. A ${CAMP_CAST.marta} precisa da planilha-mãe — a que amarra tudo. Ela está num escritório vigiado, e você tem uma janela curta durante uma auditoria de fachada.`,
+    steps:[
+      { type:"memory",
+        t:"Disfarçado de auditor, você folheia os livros. Três contas 'batem' na aparência. Grave a que esconde o desvio real:",
+        mem:{ show:5, showItems:["Conta A · entra=sai","Conta B · entra 10, sai 90","Conta C · entra=sai"], question:"Qual conta denuncia dinheiro entrando de fora (lavagem)?", options:["Conta A","Conta B","Conta C","Nenhuma"], answerIdx:1 },
+        w:{ t:"Conta B: noventa saindo pra dez que entrou. Dinheiro que nasceu do nada — ou melhor, do crime. Você fotografou a planilha-mãe. A Falange tem um rombo no papel agora.", m:26, x:18, rp:5, flag:{ planilha_mae:true } },
+        f:{ t:"Você fixou a conta errada na memória e apontou pra contabilidade limpa. O verdadeiro caixa dois continuou invisível — e o escritório reforçou a guarda.", x:8, q:4 } },
+      { t:"Com a planilha-mãe, você pode apertar o gerente financeiro pra virar delator — ou usar tudo pra pedir o bloqueio dos bens já.",
+        c:[
+          { l:"Pressionar o gerente a delatar Dom Heitor", p:.65,
+            w:{ t:"O gerente, entre a Falange e a cadeia, escolheu falar. Entregou a estrutura offshore inteira — inclusive um cofre que a Justiça nem sonhava. Vale ouro.", m:20, x:18, rp:5, flag:{ gerente_delator:true } },
+            f:{ t:"Ele preferiu o silêncio — Dom Heitor paga advogado melhor que a ameaça de cadeia assusta. Você ficou com a planilha, sem o mapa do tesouro.", m:14, x:10 } },
+          { l:"Pedir bloqueio imediato dos bens", p:.8,
+            w:{ t:"A ${CAMP_CAST.marta} conseguiu a liminar. Contas congeladas da noite pro dia. A Falange acordou sem acesso ao próprio dinheiro. Pânico no império dourado.", m:24, x:14, rp:6 },
+            f:{ t:"O bloqueio vazou antes de sair. Dom Heitor moveu o grosso pra fora horas antes. Você congelou cascas vazias.", m:10, x:6 } },
+        ]},
+    ]},
+  { id:"a4m3", camp:true, act:4, side:"pl", rank:[0,3], requires:["a4m2"], reqFlags:{ planilha_mae:true }, title:"O Doutor", risk:"alto", pay:"R$ 73–130 mil",
+    desc:`Percival "Doutor" Gomes é o cérebro contábil da Falange — quem transforma dinheiro de sangue em dividendo. Sem ele, o império não fecha o balanço. A ${CAMP_CAST.ivone} autoriza a captura.`,
+    steps:[
+      { type:"qte", tag:"gear", t:"O Doutor só sai de casa pra uma coisa: a missa das seis. Ali, sem seguranças, por dez minutos. A abordagem tem que ser cirúrgica e discreta. TOQUE no momento certo:",
+        qte:{ window:[0.44,0.60], period:1200,
+          w:{ t:"No adro da igreja, sem estardalhaço, você o abordou entre uma ave-maria e outra. O Doutor nem levantou a voz — homem de números sabe quando a conta fechou contra ele. Preso, limpo, sem tiro.", m:40, x:20, rp:7, flag:{ doutor_preso:true } },
+          f:{ t:"Você se moveu no tempo errado e um coroinha gritou. O Doutor correu pra dentro da sacristia e trancou a porta. Virou cerco constrangedor numa igreja cheia. Você o pegou — mas com holofote e reclamação do bispo.", m:20, x:10, q:6, flag:{ doutor_preso:true } } } },
+      { t:`Na sala de custódia, o Doutor cruza as mãos: "Sou contador, não bandido. Posso te mostrar onde o Dom Heitor guarda o que nem a mulher dele sabe. Em troca de... consideração." ${CAMP_CAST.rocha}, o Corregedor, pediu pra acompanhar seu interrogatório 'por rotina'.`,
+        c:[
+          { l:"Delação formal, gravada, com a promotora", p:.8,
+            w:{ t:`Tudo nos conformes, com a ${CAMP_CAST.marta} e câmera ligada. O Doutor abriu o mapa do tesouro da Falange na frente do ${CAMP_CAST.rocha} — que, pela primeira vez, te olhou com respeito. Delação de manual.`, m:16, x:20, rp:8, flag:{ doutor_delatou:true } },
+            f:{ t:"O Doutor recuou na hora H, com medo da Falange alcançá-lo até na cela. Ficou a captura, sem a delação. Ainda assim, um golpe duro no império.", m:12, x:12, rp:3 } },
+          { l:"Acordo por fora: informação por 'consideração'", p:.55,
+            w:{ t:`Vocês conversaram sem câmera. Ele te deu a localização do cofre-mestre; você deu um 'esquecimento' no auto. O ${CAMP_CAST.rocha} anotou algo no caderninho e não disse nada. De novo. Você tem o tesouro — e mais uma corda no pescoço.`, m:30, x:8, c:3, d:120, flag:{ doutor_delatou:true, acordo_doutor:true } },
+            f:{ t:`O ${CAMP_CAST.rocha} estava ouvindo da sala ao lado. O 'acordo por fora' virou linha no relatório dele. Você pegou a informação — e uma investigação da Corregedoria de brinde.`, m:20, x:4, c:4, d:120, flag:{ acordo_doutor:true } } },
+        ]},
+    ]},
+  { id:"a4m4", camp:true, act:4, side:"pl", rank:[0,3], requires:["a4m3"], title:"O Cofre-Mestre", risk:"alto", pay:"R$ 89–160 mil",
+    desc:`A delação do Doutor revelou o cofre-mestre da Falange: uma sala-forte sob uma joalheria de luxo, com o dinheiro vivo que alimenta o crime há uma década. Operação de busca e apreensão autorizada.`,
+    steps:[
+      { t:"A joalheria fica num shopping cheio. Como você conduz a apreensão sem virar espetáculo — ou tragédia?",
+        c:[
+          { l:"Operação fora do horário, com perícia contábil", p:.8, tag:"vest",
+            w:{ t:"Madrugada, shopping fechado, perícia contando cédula por cédula com câmera ligada. Toda a cadeia de custódia impecável. A Falange perdeu o coração financeiro num auto que advogado nenhum derruba.", m:44, x:20, rp:7 },
+            f:{ t:"Um vigia noturno acionou o alarme e a coisa quase virou refém. Você apreendeu o cofre, mas a operação apressada abriu brechas processuais.", m:24, x:10, h:-8, q:6 } },
+          { l:"Apreensão relâmpago em horário comercial", p:.55,
+            w:{ t:"Ação rápida à luz do dia, imprensa filmando o dinheiro saindo em malotes. Impacto público enorme — a cidade viu o império dourado sangrar. Espetáculo calculado que deu certo.", m:40, x:16, rp:5, q:4 },
+            f:{ t:"Pânico no shopping, pessoas correndo, uma criança quase pisoteada. Você pegou o cofre, mas a manchete foi sobre o caos, não sobre a vitória.", m:22, x:8, rp:-3, q:6 } },
+        ]},
+      { t:"Dentro do cofre, além do dinheiro, um envelope: fotos de um juiz recebendo propina da Falange. Prova explosiva — e perigosa.",
+        c:[
+          { l:"Entregar à promotora pela via oficial", p:.75,
+            w:{ t:`Você passou o envelope pra ${CAMP_CAST.marta} com registro de cadeia de custódia. O juiz caiu junto com a Falange. Um sistema inteiro de proteção ruiu. Isso é fazer história — pela porta da frente.`, x:20, rp:8, flag:{ juiz_exposto:true } },
+            f:{ t:"A prova vazou no caminho e o juiz teve tempo de se blindar. A oportunidade de ouro escorreu pelos dedos por um furo de sigilo.", x:8, rp:2 } },
+          { l:"Guardar as fotos 'para o caso de precisar'", p:.7,
+            w:{ t:"Você fez uma cópia antes de entregar o resto. Agora tem um juiz na palma da mão — seguro ou veneno, depende do dia. Poder assim vicia. E a ficha registrou o desvio da prova.", x:10, c:2, d:0, flag:{ juiz_refem:true } },
+            f:{ t:"Guardar prova é crime, e o juiz tinha olhos em todo lugar. Descobriram sua cópia. Agora ele te teme — e te caça.", x:4, c:3, R:1, flag:{ juiz_refem:true } } },
+        ]},
+    ]},
+  { id:"a4m5", camp:true, act:4, side:"pl", rank:[0,3], requires:["a4m4"], boss:"fd", title:"O Preço de Dom Heitor", risk:"altíssimo", pay:"decisão de carreira",
+    desc:`Sem dinheiro, sem contador, sem juiz comprado — Dom Heitor está nu. Você vai buscá-lo na cobertura dourada dele. Ele te recebe de terno impecável, servindo uísque, como se você fosse convidado. "Sente-se. Todo problema tem um preço. Qual é o seu?"`,
+    steps:[
+      { t:`Dom Heitor desliza um cheque em branco pela mesa: "Preencha. Sete dígitos, oito, o que sua consciência aguentar. Você 'perde' a planilha-mãe, eu viajo, e você se aposenta rico e vivo. A Falange sempre paga suas dívidas." ${CH.par} espera no corredor. ${CAMP_CAST.rocha} coordena a operação lá embaixo.`,
+        c:[
+          { l:"Rasgar o cheque e dar voz de prisão", p:1,
+            w:{ t:`Você rasgou o cheque em dois e leu os direitos dele. Dom Heitor perdeu a compostura pela primeira vez na vida: "Você é um tolo." Talvez. Mas o império dourado caiu inteiro, legalmente, com a planilha-mãe na mesa da ${CAMP_CAST.marta}. Um chefe que ninguém achava que cairia, caiu — pela contabilidade. História pura.`, m:20, x:26, rp:10, flag:{ heitor_preso:true }, arrest:false },
+            r:"Sete dígitos rasgados. Alguns preços a gente não paga." },
+          { l:"Preencher o cheque e 'perder' a planilha", p:1,
+            w:{ t:`Você preencheu um número que nem ousa dizer em voz alta. A planilha-mãe teve um 'problema de digitalização' e foi inutilizada. Dom Heitor embarcou num jato particular ao amanhecer, brindando à sua saúde. Você ficou rico como nunca sonhou — e réu de um segredo que o ${CAMP_CAST.rocha} farejou no mesmo dia.`, m:0, x:6, c:4, d:250, flag:{ heitor_fugiu:true } },
+            r:"O cheque tinha muitos zeros. A ficha, agora, também." },
+        ]},
+    ]},
+);
+// ============ ATO 5: O CORVO (rank 3) — a queda de Jordan (método: inteligência) e o desfecho ============
+MISSIONS.push(
+  { id:"a5m1", camp:true, act:5, side:"pl", rank:[0,3], title:"O Fantasma", risk:"médio", pay:"R$ 73–130 mil",
+    desc:`Serpente caiu na bala, Falange caiu na planilha. Sobra Jordan, chefe d'Os Corvos — e ninguém tem uma foto sequer dele. Sem rosto, sem digital, sem voz gravada. A ${CAMP_CAST.ivone}: "Esse não se pega com força nem com dinheiro. Se pega com paciência e cérebro. Você virou o melhor que eu tenho. Prova."`,
+    steps:[
+      { t:"Como se começa a caçar um homem que talvez nem exista com esse nome?",
+        c:[
+          { l:"Cruzar padrões: quem os Corvos obedecem sem ver", p:.75,
+            w:{ t:"Você não procurou o homem — procurou a sombra dele nas ordens. Quem manda sem aparecer deixa rastro no comportamento dos outros. Um padrão emergiu: as ordens vinham sempre depois de um mesmo carro passar. Jordan começou a existir.", m:26, x:18, rp:5 },
+            f:{ t:"Você perseguiu boatos e apelidos que davam voltas em si mesmos. Os Corvos plantam lendas de propósito. Semanas gastas caçando fumaça.", m:12, x:8 } },
+          { l:"Grampear a rede de mensageiros dos Corvos", p:.6, tag:"gear",
+            w:{ t:"Os recados dos Corvos passavam por crianças e idosos, nunca por telefone. Você mapeou a teia humana até um nó central — um ponto por onde tudo passava. Perto do fantasma.", m:22, x:18, rp:4, q:5 },
+            f:{ t:"A rede sentiu o grampo e mudou de código numa noite. Os Corvos são paranoicos por natureza. Você voltou à estaca zero, agora sob suspeita deles.", m:10, x:6, q:6 } },
+        ]},
+      { t:`${CH.rivP} aparece com uma 'pista quente' sobre Jordan e insiste em conduzir essa linha da investigação junto. Algo no timing dele te incomoda.`,
+        c:[
+          { l:"Aceitar, mas vigiar os passos dele", p:.7,
+            w:{ t:`Você deixou ${CH.rivP} perto — e de olho. A 'pista quente' dele levava a lugar nenhum, tarde demais, sempre. Coincidência demais pra ser coincidência. Uma suspeita fria começou a crescer.`, x:14, rp:3, flag:{ suspeita_vidal:true } },
+            f:{ t:`${CH.rivP} conduziu a linha pro buraco e culpou você pelo fracasso na frente da capitã. Ele joga sujo — e joga bem.`, x:6, R:1 } },
+          { l:"Recusar e tocar sozinho", p:.65,
+            w:{ t:`Você cortou ${CH.rivP} da investigação. Ele fez cara de ofendido — cara demais, teatral. Trabalhar só é mais lento, mas ninguém sopra seus passos. Por ora.`, x:10, R:1 },
+            f:{ t:`Sem apoio e sobrecarregado, você perdeu uma janela importante. ${CH.rivP} aproveitou pra dizer que 'avisou'. A investigação emperrou.`, x:6 } },
+        ]},
+    ]},
+  { id:"a5m2", camp:true, act:5, side:"pl", rank:[0,3], requires:["a5m1"], title:"A Toupeira", risk:"alto", pay:"R$ 81–146 mil",
+    desc:`Toda vez que você chega perto de Jordan, ele já sabe. A ${CAMP_CAST.ivone} fecha a porta da sala: "Tem uma toupeira aqui dentro. Alguém da casa vende nossos passos pros Corvos. Descobre quem — e confia em pouca gente."`,
+    steps:[
+      { t:"Como você fareja um traidor dentro da própria corporação sem espantá-lo?",
+        c:[
+          { l:"Plantar três informações falsas diferentes", p:.8,
+            w:{ t:"Você deu a três suspeitos três 'segredos' distintos. Só um vazou pros Corvos — e você sabia exatamente qual tinha dado a quem. A toupeira se traiu sozinha. Trabalho de mestre.", m:24, x:20, rp:6, flag:{ toupeira_id:true } },
+            f:{ t:"O traidor era mais esperto que a isca e não mordeu nenhuma. Pior: percebeu que estava sendo testado e se calou. Agora está alerta.", m:12, x:8 } },
+          { l:"Rastrear acessos aos arquivos da investigação", p:.65,
+            w:{ t:"Você auditou quem abriu quais arquivos e quando. Um nome acessou pastas que não eram da alçada dele, sempre na véspera dos vazamentos. O log não mente.", m:22, x:16, rp:5, flag:{ toupeira_id:true } },
+            f:{ t:"A toupeira usava o login de um colega desavisado. O log apontou um inocente e você quase acusou a pessoa errada. Recuou a tempo, mas perdeu credibilidade.", m:10, x:6 } },
+        ]},
+      { t:`A trilha da toupeira aponta para... ${CH.rivP}. Seu rival de sempre vende segredos aos Corvos. Você tem a prova nas mãos. Como age?`,
+        c:[
+          { l:"Levar a prova à Corregedoria pela via oficial", p:.8,
+            w:{ t:`Você entregou tudo ao ${CAMP_CAST.rocha} — o Corregedor que tanto te vigiou agora trabalhava a seu favor. ${CH.rivP} foi preso por corrupção e traição. A ironia não passou despercebida: a Corregedoria, dessa vez, era sua aliada.`, x:18, rp:8, R:-2, flag:{ vidal_preso:true } },
+            f:{ t:`${CH.rivP} tinha um padrinho graúdo e a prova 'não foi considerada suficiente'. Ele saiu ileso e agora sabe que você sabe. A guerra fria virou quente.`, x:8, R:2 } },
+          { l:"Usar a toupeira: alimentá-la com iscas p/ Jordan", p:.6,
+            w:{ t:`Em vez de prender ${CH.rivP}, você o transformou em arma sem ele saber: passou a alimentá-lo com informações falsas que iam direto pros Corvos. Agora Jordan recebe exatamente o que você quer que ele receba. Xadrez de verdade.`, x:16, rp:4, flag:{ vidal_duplo:true } },
+            f:{ t:`${CH.rivP} percebeu a manipulação e virou o jogo — passou a filtrar o que era isca. Você perdeu o controle do canal e ganhou um inimigo interno que agora joga nos dois times contra você.`, x:6, R:2 } },
+        ]},
+    ]},
+  { id:"a5m3", camp:true, act:5, side:"pl", rank:[0,3], requires:["a5m2"], title:"A Voz do Corvo", risk:"alto", pay:"R$ 89–160 mil",
+    desc:`Controlando o vazamento, você finalmente faz Jordan se mover. Célio "Sombra" Prado, o braço-direito dos Corvos, marca um encontro com a 'toupeira'. É a sua chance de gravar a voz do fantasma pela primeira vez.`,
+    steps:[
+      { type:"memory",
+        t:"No encontro grampeado, três vozes falam em código. Grave a frase que identifica quem dá as ordens de verdade:",
+        mem:{ show:5, showItems:["'o ninho decide'","'eu só passo o recado'","'o Corvo quer assim'"], question:"Qual frase revela a hierarquia — quem obedece a quem?", options:["'o ninho decide'","'eu só passo o recado'","'o Corvo quer assim'","nenhuma"], answerIdx:1 },
+        w:{ t:"'Eu só passo o recado' — o Sombra se entregou como mensageiro, não como cabeça. Seguindo a origem do recado, você chegou onde ninguém chegou: a voz de Jordan, gravada, dando ordem. O fantasma ganhou som.", m:28, x:20, rp:6, flag:{ voz_jordan:true } },
+        f:{ t:"Você se perdeu no código e seguiu a voz errada — a de um chamariz. O Sombra sumiu, e os Corvos souberam do grampo. A janela fechou com estrondo.", x:8, q:6 } },
+      { t:`A gravação revela algo que gela: Jordan cita, pelo apelido, um informante SEU — ${CAMP_CAST.bispo}, o homem de rua que te alimentou a campanha inteira. O Bispo joga dos dois lados.`,
+        c:[
+          { l:"Confrontar o Bispo e virá-lo contra Jordan", p:.65,
+            w:{ t:`Você encurralou ${CAMP_CAST.bispo} com a gravação. Apavorado, ele confessou e aceitou trair Jordan pra sobreviver. Um agente duplo que agora joga pro seu lado — a chave pra dentro do ninho dos Corvos.`, m:18, x:18, rp:5, flag:{ bispo_virado:true } },
+            f:{ t:`${CAMP_CAST.bispo} negou, avisou Jordan e sumiu da cidade na mesma noite. Você perdeu sua melhor fonte e escancarou seu jogo pros Corvos.`, m:10, x:8, q:6 } },
+          { l:"Fingir que não sabe e alimentá-lo de mentiras", p:.6,
+            w:{ t:`Você não deu pinta. Continuou usando ${CAMP_CAST.bispo} como sempre — só que agora tudo que você conta pra ele é veneno calculado pra chegar em Jordan. O informante virou seu cavalo de Troia sem saber.`, x:16, rp:4, flag:{ bispo_troia:true } },
+            f:{ t:`${CAMP_CAST.bispo} sentiu a frieza nova em você e desconfiou. Contou a Jordan que você 'mudou'. Agora os Corvos sabem que você sabe de alguma coisa.`, x:6, q:4 } },
+        ]},
+    ]},
+  { id:"a5m4", camp:true, act:5, side:"pl", rank:[0,3], requires:["a5m3"], reqFlags:{ voz_jordan:true }, title:"A Isca Perfeita", risk:"altíssimo", pay:"R$ 97–170 mil",
+    desc:`Com a voz gravada e um agente dentro, você monta a armadilha final. Jordan só aparece pessoalmente por uma coisa: quando acha que vai eliminar uma ameaça. Então você vai ser a ameaça — a isca é você mesmo.`,
+    steps:[
+      { t:"Você vaza (pelo canal controlado) que 'o policial que derrubou Serpente e Falange' vai sozinho a um endereço. Jordan não resiste a fechar a conta pessoalmente. Como você prepara a cilada?",
+        c:[
+          { l:"Cerco invisível: equipe camuflada, você exposto", p:.7, tag:"vest",
+            w:{ t:"Você foi o queijo na ratoeira, sozinho e visível, com trinta agentes invisíveis ao redor. Jordan mordeu: apareceu em pessoa pra te ver cair. O cerco fechou no fantasma. Pela primeira vez, ele tinha um rosto — e algemas.", m:44, x:24, rp:8, flag:{ jordan_cercado:true } },
+            f:{ t:"Jordan farejou o cerco a um quarteirão e não desceu do carro. Mandou os soldados na frente. Tiroteio, você ferido, e o fantasma escapou pra ver de longe. Quase.", m:22, x:10, h:-14, q:8, flag:{ jordan_cercado:true } } },
+          { l:"Emboscada dupla: fingir que a isca falhou", p:.6, tag:"gear",
+            w:{ t:"Teatro dentro do teatro: você deixou parecer que a armadilha tinha dado errado, pra Jordan baixar a guarda e avançar. Quando ele avançou, a segunda malha se fechou. Ele nunca viu vindo. Gênio contra gênio — e você venceu.", m:46, x:22, rp:7, flag:{ jordan_cercado:true } },
+            f:{ t:"A camada dupla era complexa demais e um sinal se cruzou. Jordan leu a hesitação e recuou pra sombra. Você o encurralou mesmo assim, no susto, mas o plano perfeito virou improviso.", m:24, x:12, h:-8, flag:{ jordan_cercado:true } } },
+        ]},
+    ]},
+  { id:"a5m5", camp:true, act:5, side:"pl", rank:[0,3], requires:["a5m4"], reqFlags:{ jordan_cercado:true }, boss:"cv", title:"O Ninho Vazio", risk:"altíssimo", pay:"desfecho da carreira",
+    desc:`Cara a cara com Jordan, enfim. Sem terno, sem tatuagem à mostra, um homem comum de olhos calmos — o que o torna mais assustador. "Você é bom", ele diz, quase orgulhoso. "Bom demais pra continuar honesto por muito tempo. Eu conheço o seu tipo. Já fui o seu tipo."`,
+    steps:[
+      { t:`Jordan não oferece dinheiro. Oferece outra coisa: "Eu sei quem te protegeu e quem te traiu nesses anos. Sei o que o ${CAMP_CAST.rocha} tem na gaveta sobre você. Me deixa ir, e eu te entrego o mapa de todos os podres dessa cidade — inclusive os que te seguram pelo pescoço. Você não sobe mais sem isso." A equipe está a segundos. É a última decisão da sua carreira.`,
+        c:[
+          { l:"Algemar Jordan. Fechar o ciclo, limpo.", p:1,
+            w:{ t:`Você algemou o fantasma sem ouvir mais uma palavra. Os três chefes de Porto Esperança — Serpente, Falange e Corvos — caíram pela sua mão, cada um do seu jeito. Jordan sorriu enquanto era levado: "Honesto até o fim. Vamos ver quanto isso te custa." A cidade, por ora, respira. E a sua ficha está limpa como no primeiro dia de farda.`, m:24, x:30, rp:12, flag:{ jordan_preso:true }, arrest:false },
+            r:"O caminho difícil. Uma última vez. Como sempre." },
+          { l:"Deixar Jordan ir pelo 'mapa dos podres'", p:1,
+            w:{ t:`Você desviou o olhar. Jordan sumiu na multidão como sempre soube fazer — e cumpriu a palavra: um pen drive chegou às suas mãos com o mapa de toda a sujeira da cidade, incluindo o que o ${CAMP_CAST.rocha} guardava contra você. Agora você é intocável. E é dono de segredos que fazem de você o homem mais poderoso — e mais sozinho — de Porto Esperança.`, m:0, x:8, c:4, d:200, flag:{ jordan_fugiu:true } },
+            r:"O fantasma escapou. E te deixou as chaves do reino podre." },
+        ]},
+    ]},
+);
 // ---------- MISSÕES ADICIONAIS (v9 — progressão mais longa) ----------
 MISSIONS.push(
   // PM — patrulha
@@ -5641,6 +5827,15 @@ export default function App() {
             const novo = CAMP_ACTS[cp.act];
             c.log = (c.log ? c.log + "\n" : "") + `📖 FIM DO ATO ${antigo.n} — ${antigo.title}. Começa o ATO ${novo.n}: ${novo.title} — ${novo.desc}`;
             chronPush(c, 1, c.week, `Ato ${antigo.n} (${antigo.title}) encerrado — começa ${novo.title}`, "promo");
+          } else if (!restantes.length && cp.act >= 5 && !c.ending) {
+            // FIM DA CAMPANHA: o desfecho depende do caminho moral (chefes presos x soltos, ficha suja)
+            const fl = cp.flags;
+            const presos = (fl.naja_preso ? 1 : 0) + (fl.heitor_preso ? 1 : 0) + (fl.jordan_preso ? 1 : 0);
+            const soltos = (fl.naja_fugiu ? 1 : 0) + (fl.heitor_fugiu ? 1 : 0) + (fl.jordan_fugiu ? 1 : 0);
+            if (soltos === 0 && c.corr < 4) c.ending = "sec_heroi";
+            else if (soltos >= 2 || cp.dirty >= 300) c.ending = "sec_sombra";
+            else c.ending = "coronel_reformado";
+            chronPush(c, 1, c.week, `Os três tronos de Porto Esperança caíram — presos ${presos}, fugidos ${soltos}`, "win");
           }
         }
       }
@@ -9972,6 +10167,35 @@ export default function App() {
             <Btn onClick={() => { wipeSave(); restartAll(); }} full>NOVA HISTÓRIA ▸</Btn>
           </Modal>
         )}
+
+        {(cr.ending === "sec_heroi" || cr.ending === "sec_sombra" || cr.ending === "coronel_reformado") && (() => {
+          const EP = {
+            sec_heroi: { icon:"🎖", cor:"#D9B25F", titulo:"SECRETÁRIO DE SEGURANÇA",
+              texto:`Serpente, Falange, Corvos — os três tronos de Porto Esperança caíram pela sua mão, cada um do seu jeito, todos sem uma mancha na sua ficha. ${CAMP_CAST.rocha}, o Corregedor que te vigiou a carreira inteira, fechou a pasta vazia e, pela primeira vez, estendeu a mão: "Foi tudo limpo. Eu conferi mil vezes. Raro. Bom." O governador te nomeou Secretário de Segurança Pública. Você chegou ao topo com o distintivo intacto — a lenda que a cidade contará pros filhos.` },
+            sec_sombra: { icon:"🕶", cor:"#8a6db0", titulo:"O HOMEM DO SISTEMA",
+              texto:`Os chefes caíram — ou desapareceram no exato momento em que te convinha. O caixa dois virou patrimônio, os segredos viraram coleira nos poderosos. Você é Secretário de Segurança agora, sim, mas todos sabem quem realmente manda em Porto Esperança nas sombras. ${CAMP_CAST.rocha} guardou tudo numa gaveta que nunca abrirá — vocês têm um acordo silencioso. Você venceu. Só não do jeito que a farda nova prometia. O poder é seu. A consciência, o preço.` },
+            coronel_reformado: { icon:"🎗", cor:"#5BA0C0", titulo:"CORONEL REFORMADO",
+              texto:`Você derrubou os três — a maioria pela porta da frente, um ou outro por um atalho que ninguém precisa saber. Não chegou ao gabinete do Secretário: ficha boa demais pra cadeia, manchada demais pro palanque. Reformaram você Coronel, condecorado, respeitado nas ruas que ajudou a limpar. ${CH.par} apareceu na cerimônia, mancando do velho tiro, e bateu continência: "Valeu a pena, parceiro." Valeu. Nem todo herói vira estátua — alguns só viram lenda de quartel.` },
+          }[cr.ending];
+          return (
+            <Modal>
+              <div className="text-3xl text-center mb-2">{EP.icon}</div>
+              <div className="font-mono font-bold text-center mb-2" style={{ letterSpacing:"0.1em", color:EP.cor }}>{EP.titulo}</div>
+              <div className="text-sm text-center mb-4" style={{ color:C.mut }}>{EP.texto}</div>
+              {(cr.chron || []).length > 0 && (
+                <div className="rounded-lg p-2 mb-3 text-left" style={{ background:C.panel2 }}>
+                  <div className="font-mono text-center mb-1" style={{ fontSize:10, color:C.mut, letterSpacing:"0.12em" }}>📜 A TRAJETÓRIA</div>
+                  {(cr.chron || []).filter(x => x.tag === "win" || x.tag === "promo" || x.tag === "miss").slice(-5).map((c, i) => (
+                    <div key={i} className="font-mono mb-1" style={{ fontSize:10, color:C.text }}>
+                      <span style={{ color:C.mut }}>Sem. {c.week}</span> — {c.text}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Btn onClick={() => { wipeSave(); restartAll(); }} full>NOVA HISTÓRIA ▸</Btn>
+            </Modal>
+          );
+        })()}
 
         {showHelp && (
           <Modal>
