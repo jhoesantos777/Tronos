@@ -895,6 +895,34 @@ function personaOf(cr) {
   cand.sort((x, y) => y[1] - x[1]);
   return cand[0][1] >= 20 ? cand[0][0] : "Em formação";
 }
+// V300.3: INVESTIGAÇÃO POLICIAL EM 8 FASES (carreira facção) — nunca sorteio simples.
+// Evolui a partir do estado: procurado, violência e "provas" (testemunhas/denúncias das
+// missões) sobem; influência, popularidade, lealdade e subornos abafam.
+const INV8_LABELS = ["Desconhecido", "Suspeito", "Monitorado", "Escutas", "Investigação", "Mandado expedido", "Operação Especial", "Caçada Nacional"];
+const INV8_CUT = [0, 12, 26, 42, 58, 72, 87, 96];
+function invPhase(score) { let p = 0; for (let i = 0; i < INV8_CUT.length; i++) if (score >= INV8_CUT[i]) p = i; return p; }
+function invEvidence(c) {
+  const fl = (c.campfc && c.campfc.flags) || {};
+  return (fl.video_agressao ? 6 : 0) + (fl.roubou_comunidade ? 4 : 0) + (fl.rato_das_cestas ? 3 : 0)
+    + (fl.waldemar_traumatizado ? 3 : 0) + (fl.mentira_exposta ? 3 : 0)
+    + (fl.policia_alerta ? 8 : 0) + (fl.suspeita_sobre_voce ? 4 : 0);
+}
+function stepInvestigation(c) {
+  if (c.side !== "fc") return;
+  const a = c.attr || {};
+  const sobe = c.heat * 0.10 + (a.viol || 0) * 0.06 + invEvidence(c) * 0.5;
+  const subornos = (c.corr || 0) * 2; // "acertos" com a lei protegem o jogador de facção
+  const abafa = (a.infl || 0) * 0.05 + (a.pop || 0) * 0.05 + subornos + (c.loyal >= 60 ? 2 : 0) + 1.6;
+  c.invScore = clamp((c.invScore || 0) + sobe - abafa, 0, 100);
+  c.inv8 = invPhase(c.invScore);
+}
+// Risco de prisão CALCULADO (0-1) — investigação/procurado/violência menos proteções.
+function arrestRisk(c) {
+  const a = c.attr || {};
+  const raw = (c.inv8 || 0) * 7 + c.heat * 0.35 + (a.viol || 0) * 0.22
+    - c.loyal * 0.20 - (a.infl || 0) * 0.22 - (a.pop || 0) * 0.18 - (c.corr || 0) * 4;
+  return clamp(raw / 100, 0, 0.9);
+}
 
 // ============ CARREIRA v2: "Do Recado ao Trono" ============
 // Escada nova da facção. Os 5 thresholds antigos continuam valendo (mesmo nº de degraus).
@@ -5341,6 +5369,7 @@ function initCareer(side, mother, pname) {
     // segredos da campanha (ex.: se o X9 existe) — cada carreira é diferente.
     attr: side === "fc" ? initAttr() : null,
     campfc: side === "fc" ? (() => { const seed = 1 + Math.floor(Math.random() * 999999); return { act:1, done:[], flags:{ x9_existe: caseRng(seed)() < 0.55 }, seed }; })() : null,
+    inv8: 0, invScore: 0, prison: null, // V300.3: investigação em 8 fases + sistema penitenciário
     // Campanha "Porto Esperança Confidencial" (só polícia): atos, flags de enredo e caixa dois
     campaign: side === "pl" ? { act:1, done:[], flags:{}, dirty:0, hist:[], bosses:[], epilogue:null } : null,
     contasAtraso: 0,
@@ -5362,6 +5391,9 @@ function migrateCareer(cr) {
   // V300: saves de facção antigos ganham atributos e a campanha "Do Beco ao Trono"
   if (cr.side === "fc" && !cr.attr) cr.attr = initAttr();
   if (cr.side === "fc" && !cr.campfc) { const seed = 1 + Math.floor(Math.random() * 999999); cr.campfc = { act: Math.max(1, Math.min(5, cr.rank + 1)), done:[], flags:{ x9_existe: caseRng(seed)() < 0.55 }, seed }; }
+  if (cr.inv8 == null) cr.inv8 = 0;
+  if (cr.invScore == null) cr.invScore = 0;
+  if (cr.prison === undefined) cr.prison = null;
   return cr;
 }
 // Próxima missão da campanha policial: respeita ato, encadeamento (requires),
@@ -6489,12 +6521,15 @@ export default function App() {
         const pool = EVENTS.filter(e => e.side === c.side);
         c.event = structuredClone(pool[Math.floor(Math.random() * pool.length)]);
       }
-      if (!c.ending && c.side === "fc" && c.heat >= 95) {
+      // V300.3: evolui a investigação em 8 fases antes de decidir a prisão
+      if (c.side === "fc") stepInvestigation(c);
+      if (!c.ending && c.side === "fc" && ((c.inv8 >= 5 && Math.random() < arrestRisk(c)) || c.heat >= 98)) {
         c.event = null;
         c.pendingArrest = true;
-        c.heat = 70;
-        c.log = "🚨 Cercaram o beco. Dessa vez não teve pra onde correr.";
-      } else if (!c.ending && c.side === "fc" && c.heat >= 80 && !c.event) {
+        c.invScore = clamp(c.invScore - 28, 0, 100); c.inv8 = invPhase(c.invScore);
+        c.heat = clamp(c.heat - 20, 0, 100);
+        c.log = c.inv8 >= 6 ? "🚨 OPERAÇÃO ESPECIAL: dezenas de viaturas, helicóptero, o cerco fechou no seu quarteirão. Mandado na mão." : "🚨 Cercaram o beco. A investigação amadureceu e dessa vez veio com mandado.";
+      } else if (!c.ending && c.side === "fc" && c.inv8 >= 3 && c.heat >= 70 && !c.event) {
         c.event = {
           t:"O cerco está fechando: viaturas rondando, perguntas sendo feitas. " + CH.mgr + " sugere resolver.",
           c:[
@@ -6584,18 +6619,79 @@ export default function App() {
   function serveTime() {
     updateCr(c => {
       c.pendingArrest = false;
-      c.jail = 2;
+      // V300.3: pena escalona com a investigação e a violência acumuladas
+      const sent = c.side === "fc"
+        ? clamp(2 + Math.floor((c.inv8 || 0) / 2) + ((c.attr && c.attr.viol >= 60) ? 1 : 0), 2, 8)
+        : 2;
+      c.jail = sent;
+      c.prison = { total: sent, tries: 0, habeas: false };
       c.heat = clamp(c.heat - 25, 0, 100);
+      if (c.side === "fc") { c.invScore = clamp(c.invScore - 40, 0, 100); c.inv8 = invPhase(c.invScore); }
       c.weekDone = true;
       c.scene = null;
-      c.log = "🔒 Algemas, ficha, cela. Duas semanas pra pensar na vida.";
-      chronPush(c, 2, c.week, `${c.pname} foi preso e cumpriu pena`, "capt");
+      c.log = `🔒 Algemas, ficha, cela. ${sent} semana${sent > 1 ? "s" : ""} pra pensar na vida.`;
+      chronPush(c, 2, c.week, `${c.pname} foi preso — pena de ${sent} semanas`, "capt");
       c.offers = [];
       return c;
     });
   }
   function jailWeek() {
-    updateCr(c => { c.weekDone = true; return c; });
+    updateCr(c => {
+      // V300.3: a cada semana na cela, a facção pode agir por você se a lealdade for alta
+      if (c.side === "fc" && c.jail > 1 && c.loyal >= 55) {
+        const chance = Math.min(0.4, (c.loyal - 50) / 120 + (c.attr ? c.attr.infl / 400 : 0));
+        if (Math.random() < chance) {
+          c.jail = 0; c.prison = null; c.weekDone = true;
+          c.heat = clamp(c.heat + 12, 0, 100);
+          c.log = `🤝 O movimento não te esqueceu: ${careerCast(c.mother).boss} moveu as peças e um habeas caiu do céu. Portões abertos antes da hora — você deve essa à facção.`;
+          chronPush(c, 2, c.week, `A ${BASE_FAC[c.mother].short} tirou ${c.pname} da cadeia`, "law");
+          return c;
+        }
+      }
+      c.weekDone = true;
+      return c;
+    });
+  }
+  function tryEscape() {
+    updateCr(c => {
+      if (c.weekDone || c.jail <= 0) return c;
+      const a = c.attr || {};
+      const odds = clamp(0.18 + (a.icrim || 0) / 350 + (a.infl || 0) / 400 - (c.inv8 || 0) * 0.02, 0.08, 0.6);
+      c.prison = c.prison || { total: c.jail, tries: 0 };
+      c.prison.tries += 1;
+      if (Math.random() < odds) {
+        c.jail = 0; c.prison = null; c.weekDone = true;
+        c.heat = clamp(c.heat + 30, 0, 100);
+        if (c.side === "fc") { c.invScore = clamp(c.invScore + 20, 0, 100); c.inv8 = invPhase(c.invScore); }
+        c.log = "🏃 Pela mureta dos fundos, na troca de plantão. Você sumiu no mato antes do alarme. Livre — e agora foragido, com o nome no topo da lista.";
+        chronPush(c, 3, c.week, `${c.pname} fugiu da cadeia`, "capt");
+        if (c.attr) c.attr.resp = clamp(c.attr.resp + 8, 0, 100);
+      } else {
+        c.jail += 2; c.weekDone = true;
+        c.hp = clamp(c.hp - 15, 5, 100);
+        c.log = "⛓ A fuga deu errado: apanhou dos agentes, foi pro isolamento e a pena cresceu. Fugir de novo vai ser mais difícil.";
+        chronPush(c, 2, c.week, `Tentativa de fuga fracassada`, "capt");
+      }
+      return c;
+    });
+  }
+  function habeasJail() {
+    updateCr(c => {
+      const cost = 60;
+      if (c.weekDone || c.jail <= 0 || c.cash < cost || (c.prison && c.prison.habeas)) return c;
+      c.cash -= cost;
+      c.prison = c.prison || { total: c.jail, tries: 0 };
+      c.prison.habeas = true;
+      const inf = c.attr ? c.attr.infl : 0;
+      const cut = 1 + (Math.random() < clamp(0.3 + inf / 200, 0.3, 0.85) ? 1 : 0);
+      c.jail = Math.max(0, c.jail - cut);
+      c.weekDone = true;
+      c.log = c.jail === 0
+        ? "⚖ O advogado achou a nulidade no flagrante. Habeas concedido — você sai hoje."
+        : `⚖ O advogado apertou o processo: ${cut} semana${cut > 1 ? "s" : ""} a menos de pena. Faltam ${c.jail}.`;
+      chronPush(c, 2, c.week, `Habeas corpus reduziu a pena de ${c.pname}`, "law");
+      return c;
+    });
   }
   function buyBiz(b) {
     updateCr(c => {
@@ -9917,7 +10013,21 @@ export default function App() {
                   <div className="text-xs mt-2 leading-relaxed" style={{ color:C.mut }}>
                     Falta{cr.jail > 1 ? "m" : ""} {cr.jail} semana{cr.jail > 1 ? "s" : ""} de pena. Lá fora, o movimento gira sem você — mas suas empresas seguem rendendo.
                   </div>
-                  <div className="mt-3"><Btn onClick={jailWeek} disabled={cr.weekDone} color={C.panel2} full>PASSAR A SEMANA NA CELA</Btn></div>
+                  {cr.side === "fc" && cr.loyal >= 55 && (
+                    <div className="font-mono mt-2" style={{ fontSize:10, color:C.good }}>🤝 Lealdade alta: a facção pode te tirar antes da hora a qualquer semana.</div>
+                  )}
+                  <div className="mt-3 flex flex-col gap-2">
+                    <Btn onClick={jailWeek} disabled={cr.weekDone} color={C.panel2} full>PASSAR A SEMANA NA CELA</Btn>
+                    {cr.side === "fc" && (
+                      <div className="flex gap-2">
+                        <Btn onClick={habeasJail} disabled={cr.weekDone || cr.cash < 60 || (cr.prison && cr.prison.habeas)} color={C.panel2} full>⚖ HABEAS (R$96 mil)</Btn>
+                        <Btn onClick={tryEscape} disabled={cr.weekDone} color={C.bad} full>🏃 TENTAR FUGA</Btn>
+                      </div>
+                    )}
+                  </div>
+                  {cr.side === "fc" && (
+                    <div className="font-mono mt-2" style={{ fontSize:9, color:C.mut }}>Fuga liberta na hora, mas te deixa foragido (procurado no teto). O Habeas encurta a pena sem risco.</div>
+                  )}
                 </Card>
               ) : cr.weekDone ? (
                 <Card>
@@ -10025,6 +10135,22 @@ export default function App() {
                         </div>
                         {persona !== "Em formação" && (
                           <div className="font-mono mt-2" style={{ fontSize:10, color:C.mut }}>🎭 A quebrada te vê como: <b style={{ color:C.text }}>{persona}</b></div>
+                        )}
+                        {(cr.inv8 || 0) > 0 && (
+                          <div className="mt-2 pt-2" style={{ borderTop:`1px solid ${C.line}` }}>
+                            <div className="flex justify-between items-center">
+                              <span className="font-mono" style={{ fontSize:10, color: cr.inv8 >= 5 ? C.bad : cr.inv8 >= 3 ? C.warn : C.mut }}>
+                                🔎 Investigação: <b>{INV8_LABELS[cr.inv8]}</b>
+                              </span>
+                              <span className="font-mono" style={{ fontSize:9, color:C.mut }}>fase {cr.inv8}/7</span>
+                            </div>
+                            <div className="flex gap-0.5 mt-1">
+                              {INV8_LABELS.map((_, i) => (
+                                <span key={i} style={{ flex:1, height:3, borderRadius:99, background: i <= cr.inv8 ? (cr.inv8 >= 5 ? C.bad : cr.inv8 >= 3 ? C.warn : "#5BA0C0") : "#232a3a" }} />
+                              ))}
+                            </div>
+                            {cr.inv8 >= 5 && <div className="font-mono mt-1" style={{ fontSize:9, color:C.bad }}>⚠ Mandado expedido. Uma operação pode fechar o cerco a qualquer semana — baixe o procurado, suba a lealdade ou compre proteção.</div>}
+                          </div>
                         )}
                       </Card>
                     );
