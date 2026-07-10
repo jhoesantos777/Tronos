@@ -2850,6 +2850,176 @@ MISSIONS.push(
         ]},
     ]},
 );
+// ============ ATO 2: O CERCO (rank 1) — guerra de território do Comando Serpente ============
+MISSIONS.push(
+  { id:"a2m1", camp:true, act:2, side:"pl", rank:[0,3], title:"Ponto de Estrangulamento", risk:"médio", pay:"R$ 41–68 mil",
+    desc:`A ${CAMP_CAST.ivone} espalhou o mapa na mesa: "O Comando Serpente fechou três bocas ao redor do centro. Se tomarem a quarta, estrangulam o comércio. Escolhe por onde a gente aperta primeiro."`,
+    steps:[
+      { t:"O gargalo é uma passarela sobre a linha do trem — todo produto do cs passa por ali de madrugada.",
+        c:[
+          { l:"Montar observação fixa por três noites", p:.8,
+            w:{ t:"Frio, café ruim e paciência. Na terceira noite, o fluxo inteiro mapeado: horário, mula, cobertura. Inteligência que vale um mês de blitz.", m:24, x:14, rp:3 },
+            f:{ t:"Alguém queimou a observação — provavelmente um informante do cs na própria corporação. Voltaram de mãos vazias e desconfiados.", m:12, x:6, R:1 } },
+          { l:"Blitz relâmpago já na primeira noite", p:.6, tag:"gear",
+            w:{ t:"Pegou a mula carregada e o vigia junto. Barulho, sim — mas o recado ecoou no morro: a passarela caiu.", m:30, x:12, rp:4, q:6 },
+            f:{ t:"Chegaram rápido demais e mal preparados. A mula largou tudo no trilho e sumiu. Prejuízo dos dois lados.", m:10, x:5, h:-6 } },
+        ]},
+      { t:`${CH.rivP} aparece na reunião seguinte e apresenta SEU levantamento como se fosse dele, na frente da capitã.`,
+        c:[
+          { l:"Expor os fatos com data e assinatura", p:.7,
+            w:{ t:`Você tinha os registros com horário. ${CH.rivP} gaguejou. A ${CAMP_CAST.ivone} não disse nada na hora — mas o crédito voltou pra você, e a rixa subiu de nível.`, x:12, rp:2, R:2 },
+            f:{ t:`Sua defesa soou como briga de ego. A capitã cortou os dois: "Resultado é da corporação." ${CH.rivP} saiu sorrindo.`, x:4, R:1 } },
+          { l:"Engolir agora e cobrar depois", p:.85,
+            w:{ t:"Você deixou passar. Na saída, a capitã te chamou baixinho: 'Eu sei de quem era o trabalho. Continua assim que eu enxergo.' Paciência também é patente.", x:10, rp:3 },
+            f:{ t:`${CH.rivP} entendeu seu silêncio como fraqueza e já foi assinando o próximo. O padrão se repete.`, x:5, R:1 } },
+        ]},
+    ]},
+  { id:"a2m2", camp:true, act:2, side:"pl", rank:[0,3], requires:["a2m1"], title:"Marreta na Mira", risk:"alto", pay:"R$ 57–97 mil",
+    desc:`Waldir "Marreta" Nunes, braço armado do cs, é quem bate quando alguém atrasa o acerto. A ${CAMP_CAST.marta} conseguiu o mandado — mas quer ele vivo e o auto impecável.`,
+    steps:[
+      { type:"qte", tag:"vest", t:"Marreta almoça sempre no mesmo boteco, costas pra parede, dois seguranças na porta. A janela de abordagem é o instante em que ele abaixa a guarda pro prato. TOQUE na hora:",
+        qte:{ window:[0.40,0.60], period:1200,
+          w:{ t:"Timing perfeito. Marreta ainda tinha o garfo na mão quando a algema fechou. Os seguranças nem sacaram — reféns da própria surpresa. Prisão de manual.", m:40, x:18, rp:6 },
+          f:{ t:"Meio segundo tarde. Marreta virou a mesa, os seguranças reagiram, tiro pro alto, pânico no boteco. Você o pegou na correria — mas com feridos e a imprensa em cima.", m:20, x:8, h:-10, q:8 } } },
+      { t:`No camburão, Marreta cospe sangue e um recado: "Naja manda dizer que farda também tem família." Como você registra a ameaça?`,
+        c:[
+          { l:"Boletim formal, proteção pra sua família", p:.85,
+            w:{ t:"Ameaça documentada, escolta discreta pra sua casa. A corporação levou a sério. Dormir ficou mais difícil, mas você não subestimou o aviso.", x:12, rp:3 },
+            f:{ t:"A papelada travou numa gaveta. A ameaça ficou só na sua cabeça, tirando seu sono sem te proteger.", x:6, h:-5 } },
+          { l:"Ignorar — 'bandido preso fala muito'", p:.6,
+            w:{ t:"Você fez cara de riso e seguiu. Coragem ou teimosia, funcionou por ora — Marreta foi pro presídio federal e o recado esfriou.", x:10 },
+            f:{ t:"Subestimar o cs foi caro: na semana seguinte, um carro estranho parou na frente da sua casa. Só parou. Foi o suficiente pra você entender.", x:4, h:-8, q:5 } },
+        ]},
+    ]},
+  { id:"a2m3", camp:true, act:2, side:"pl", rank:[0,3], requires:["a2m2"], title:"A Rota da Blitz", risk:"médio", pay:"R$ 41–73 mil",
+    desc:`Você monta a maior blitz do trimestre contra o cs. Na véspera, um número desconhecido — sotaque calmo — oferece uma fortuna pela rota e o horário. "Só isso. Um endereço a menos na sua lista."`,
+    steps:[
+      { t:"O telefone vibra de novo às 2h. A voz repete a oferta e sobe o valor. Sua blitz sai em cinco horas.",
+        c:[
+          { l:"Reportar o assédio e rastrear o número", p:.85,
+            w:{ t:"Você entregou o print pra inteligência. O chip era descartável, mas o padrão de ligação ligou o cs a um vereador. A blitz saiu limpa e ainda rendeu uma linha de investigação nova.", m:20, x:16, rp:5 },
+            f:{ t:"Rastreio deu em beco sem saída — chip clonado. A blitz aconteceu, mas o alvo principal já tinha esvaziado a boca. Alguém avisou.", m:14, x:8 } },
+          { l:"Vender uma rota falsa e embolsar", p:.6,
+            w:{ t:"Você passou o endereço errado. Eles esvaziaram a boca A enquanto você estourava a boca B, que eles acharam segura. Bolso cheio, blitz vitoriosa, e ninguém desconfiou. Perigosamente esperto.", m:30, x:10, c:2, d:40, flag:{ vendeu_rota:true } },
+            f:{ t:"Eles sentiram o cheiro do blefe e cruzaram as informações. Agora o cs sabe que a farda negocia — e guardou seu número. A ficha registrou o toque.", m:20, c:2, d:40, q:8, R:1, flag:{ vendeu_rota:true } } },
+        ]},
+    ]},
+  { id:"a2m4", camp:true, act:2, side:"pl", rank:[0,3], requires:["a2m3"], title:"Fumaça sem Fogo", risk:"médio", pay:"R$ 49–81 mil",
+    desc:`Tonho "Fumaça" Reis lava o dinheiro do cs numa rede de borracharias. Papel limpo, fachada perfeita. A ${CAMP_CAST.marta}: "Esse eu quero pelo CNPJ, não pela algema. Me traz a contabilidade."`,
+    steps:[
+      { type:"memory",
+        t:"Infiltrado como cliente, você fotografa a papelada exposta no balcão enquanto o gerente atende. Grave os números que não batem:",
+        mem:{ show:5, showItems:["NF 4471 · R$ 2.300","NF 4472 · R$ 88.000","NF 4473 · R$ 1.900"], question:"Qual nota fiscal está claramente 'inflada' para lavagem?", options:["NF 4471","NF 4472","NF 4473","Todas iguais"], answerIdx:1 },
+        w:{ t:"A NF 4472: oitenta e oito mil por um serviço de borracharia de esquina. Você fotografou a inconsistência que a perícia precisava. Fumaça não viu a fumaça subindo.", m:26, x:16, rp:4 },
+        f:{ t:"Você misturou os números na cabeça e apontou a nota errada. O contador percebeu o interesse e 'organizou' os arquivos antes do mandado. O rastro esfriou.", x:6, q:4 } },
+      { t:"Com a contabilidade em mãos, você pode apertar o Fumaça pra virar delator — ou entregar tudo pronto pra promotora.",
+        c:[
+          { l:"Oferecer delação: nomes em troca de pena menor", p:.7,
+            w:{ t:"Fumaça, apavorado, entregou a estrutura financeira do cs inteira — inclusive um caixa que ninguém sabia existir. Vale mais que dez prisões. A promotora te deve essa.", m:20, x:18, rp:5, flag:{ fumaca_delator:true } },
+            f:{ t:"Fumaça calculou que o cs machuca mais que a Justiça e ficou mudo. Você ainda tem o processo — mas perdeu o mapa do dinheiro.", m:14, x:10 } },
+          { l:"Entregar pronto e prender sem conversa", p:.85,
+            w:{ t:"Auto redondo, prisão sem espetáculo. A ${CAMP_CAST.marta} sorriu: 'Do jeito que eu gosto — sem holofote e sem brecha.' Duas bocas do cs caíram no mesmo mês.", m:22, x:14, rp:4 },
+            f:{ t:"A defesa achou um vício na cadeia de custódia das fotos. Fumaça respondeu solto. Lição cara sobre pressa.", m:10, x:6 } },
+        ]},
+    ]},
+  { id:"a2m5", camp:true, act:2, side:"pl", rank:[0,3], requires:["a2m4"], title:"A Emboscada", risk:"altíssimo", pay:"R$ 65–113 mil",
+    desc:`Duas bocas do cs caíram. Em retaliação, o cs prepara uma cilada — e você e ${CH.par} andam direto pra ela numa ocorrência forjada de refém.`,
+    steps:[
+      { t:`A 'vítima' que ligou some ao ver a viatura. ${CH.par} freia: "Cheiro de armadilha." As janelas ao redor se apagam uma a uma. O que você faz?`,
+        c:[
+          { l:"Recuar já e pedir cobertura", p:.7, tag:"vest",
+            w:{ t:"Você deu ré antes do primeiro tiro. A cobertura chegou e o cerco do cs virou a caçada deles. Frieza salvou os dois — dessa vez.", m:20, x:14, rp:4 },
+            f:{ t:"A ré travou num entulho plantado na rua. O primeiro tiro estilhaçou o vidro. Vocês sobreviveram deitados no carro até a cobertura — por muito pouco.", m:12, x:8, h:-12, q:8 } },
+          { l:"Avançar e furar o cerco pela frente", p:.5, tag:"gear",
+            w:{ t:"Aposta doida: você acelerou pra dentro em vez de fugir. O cs esperava recuo, não avanço. Passou reto pelo meio da emboscada. Loucura que deu certo.", m:26, x:16, rp:3, q:6 },
+            f:{ t:"Avançar pra dentro de uma emboscada é o que o nome diz. Tiro de todo lado.", m:8, x:4, h:-18, q:10 } },
+        ]},
+      { t:`${CH.par} leva um tiro na saída do cerco, cobrindo a sua janela. Ele aperta o ombro ensanguentado: "Vai... eu aguento." A escolha é imediata.`,
+        c:[
+          { l:"Abortar tudo e levar Ferraz ao hospital", p:1,
+            w:{ t:`Você largou a perseguição e voou pro pronto-socorro. ${CH.par} vai ficar três semanas fora — mas vai ficar. "Você escolheu certo", ele murmurou antes de apagar. Alguns alvos podem esperar. Parceiro não.`, x:12, rp:4, flag:{ ferraz_ferido:true } } },
+          { l:"Perseguir os atiradores — Ferraz aguenta", p:1,
+            w:{ t:`Você foi atrás do carro do cs deixando ${CH.par} apertando o próprio ombro no rádio. Pegou dois atiradores — e chegou a tempo no hospital, no susto. Ele vai se recuperar, mas ficou uma conta entre vocês que nenhum mérito paga.`, x:20, rp:2, R:1, A:-1, flag:{ ferraz_ferido:true } } },
+        ]},
+    ]},
+);
+// ============ ATO 3: SANGUE FRIO (rank 2) — a queda de Naja (método: guerra) ============
+MISSIONS.push(
+  { id:"a3m1", camp:true, act:3, side:"pl", rank:[0,3], title:"O Dossiê da Serpente", risk:"médio", pay:"R$ 57–97 mil",
+    desc:`Aurélio "Naja" Bastos, o chefe do Comando Serpente, virou prioridade nacional. A ${CAMP_CAST.ivone} te dá carta branca pra montar a investigação. "Sem dossiê, não tem operação. E eu quero um dossiê à prova de advogado."`,
+    steps:[
+      { t:"Por onde você começa a cercar um chefe que nunca aparece?",
+        c:[
+          { l:"Seguir o dinheiro: quebrar o sigilo dos laranjas", p:.75,
+            w:{ t:"Cada laranja levava a outro, até um contador que atendia 'só um cliente'. O organograma financeiro do cs começou a ter rostos. Dossiê ganhando corpo.", m:24, x:16, rp:4 },
+            f:{ t:"A quebra de sigilo vazou de dentro antes de render. Os laranjas sumiram do papel numa noite. Alguém do lado de dentro trabalha pro Naja.", m:10, x:8, R:1 } },
+          { l:"Virar alguém de dentro do cs", p:.6,
+            w:{ t:"Um segurança endividado topou usar escuta em troca de proteção pra família. De dentro do QG, ele descreveu a rotina do Naja. Ouro puro — e arriscado.", m:20, x:18, rp:3, q:5 },
+            f:{ t:"O infiltrado hesitou e o cs cheirou. Encontraram a escuta. Você perdeu a fonte e ganhou um inimigo que agora sabe do cerco.", x:6, q:8, R:1 } },
+        ]},
+      { type:"memory",
+        t:"A escuta captou a agenda semanal do Naja. Grave o único dia em que ele dorme no QG da Serpente:",
+        mem:{ show:5, showItems:["SEG · casa da mãe","TER · QG da Serpente","QUA · sítio blindado"], question:"Em que dia o Naja é mais vulnerável (dorme no QG)?", options:["Segunda","Terça","Quarta","Nunca dorme no QG"], answerIdx:1 },
+        w:{ t:"Terça-feira. Ele confia no QG mais do que devia. Você cravou o dia, o quarto e a rota de fuga que ele usaria. O dossiê está fechado — e é à prova de advogado.", m:30, x:20, rp:6, flag:{ dossie_naja:true } },
+        f:{ t:"Você trocou os dias na cabeça. Levou mais duas semanas de escuta pra reconfirmar — terça-feira —, mas fechou o dossiê no capricho. Custou tempo e mérito, não a operação.", x:8, q:6, flag:{ dossie_naja:true } } },
+    ]},
+  { id:"a3m2", camp:true, act:3, side:"pl", rank:[0,3], requires:["a3m1"], reqFlags:{ dossie_naja:true }, title:"Cerco de Aço", risk:"alto", pay:"R$ 81–146 mil",
+    desc:`Terça-feira confirmada. A operação contra o QG da Serpente é a maior da sua carreira. A ${CAMP_CAST.ivone} confia o comando de campo a você. Cada decisão custa ou salva vidas.`,
+    steps:[
+      { t:"Como você posiciona o cerco antes do amanhecer?",
+        c:[
+          { l:"Silêncio total: cercar e esperar a luz do dia", p:.75, tag:"vest",
+            w:{ t:"Ninguém disparou no escuro. Ao amanhecer, o QG estava rodeado sem que o cs percebesse. Rendição negociada, moradores ilesos. Comando de livro.", m:44, x:22, rp:6 },
+            f:{ t:"Um cão latiu, uma luz acendeu, e a vantagem do silêncio evaporou. Virou cerco tenso de horas, com a comunidade no meio.", m:24, x:12, h:-8, q:6 } },
+          { l:"Choque: entrada rápida antes que reajam", p:.55, tag:"gear",
+            w:{ t:"Trinta segundos de fúria coordenada. O cs acordou já dominado. Rápido, duro e, por sorte e treino, sem baixas civis.", m:50, x:20, rp:4, q:8 },
+            f:{ t:"Velocidade no escuro cobra pedágio: fogo cruzado, um colega ferido, pânico nas vielas. Você tomou o QG — mas o preço pesou.", m:26, x:10, h:-14, q:10 } },
+        ]},
+      { type:"qte", tag:"gear", t:"Naja tenta fugir pela rota que o dossiê previu — a laje dos fundos. Você está lá esperando. TOQUE no instante exato do bote:",
+        qte:{ window:[0.42,0.60], period:1150,
+          w:{ t:"Você surgiu na saída exata que ele achava secreta. Naja parou de mãos pra cima, incrédulo: 'Como...?' O dossiê, Naja. Sempre o dossiê. Ele está encurralado — vivo e seu.", m:40, x:22, rp:8, flag:{ naja_encurralado:true } },
+          f:{ t:"Você pulou cedo demais. Naja te viu e mudou de rota pra dentro do casarão, se trancando com reféns. O cerco continua, mas ele ganhou fôlego — e cartas na mão.", m:20, x:10, h:-6, flag:{ naja_encurralado:true } } } },
+    ]},
+  { id:"a3m3", camp:true, act:3, side:"pl", rank:[0,3], requires:["a3m2"], reqFlags:{ naja_encurralado:true }, boss:"cs", title:"A Oferta da Serpente", risk:"altíssimo", pay:"decisão de carreira",
+    desc:`Naja encurralado, você a um metro dele. Antes que o resto da equipe suba a laje, ele fala baixo, só pra você: "Todo mundo tem um número, moço. O meu pro seu é alto. Você 'erra o alvo', eu sumo do país, e sua família nunca mais vê aperto. Ninguém saberia."`,
+    steps:[
+      { t:`${CAMP_CAST.rocha}, o Corregedor, subiu junto e observa de longe, longe demais pra ouvir — perto o bastante pra ver seu rosto. A equipe chega em segundos. O que você faz com a oferta do Naja?`,
+        c:[
+          { l:"Fechar a algema. 'Meu número não existe.'", p:1,
+            w:{ t:`Você fechou a algema na frente do ${CAMP_CAST.rocha}. Naja riu sem alegria: "Farda burra." Talvez. Mas o Comando Serpente perdeu a cabeça hoje, e a cidade respirou. A ${CAMP_CAST.marta} vai adorar o auto. Seu nome entrou pra história — e pra lista negra do que sobrou do cs.`, m:30, x:26, rp:10, flag:{ naja_preso:true }, arrest:false },
+            r:"O caminho difícil, de novo. E de novo você escolheu ele." },
+          { l:"'Erra o alvo': deixar Naja escapar por uma fortuna", p:1,
+            w:{ t:`Você desviou o olhar por três segundos. Foi o suficiente: Naja escorregou pela laje e sumiu na madrugada. No dia seguinte, uma mala apareceu no seu porta-malas. O ${CAMP_CAST.rocha} anotou algo num caderninho e não disse nada. Nem precisou. Naja está livre — e agora vocês dois têm um segredo.`, m:0, x:6, c:3, d:150, flag:{ naja_fugiu:true } },
+            r:"Uma fortuna pesa. A ficha, mais ainda." },
+        ]},
+    ]},
+  { id:"a3m4", camp:true, act:3, side:"pl", rank:[0,3], requires:["a3m3"], title:"Rescaldo", risk:"médio", pay:"R$ 57–105 mil",
+    desc: `O QG da Serpente caiu. Mas caos de poder é vácuo perigoso: com ou sem Naja, os gerentes que sobraram brigam pela cadeira — e a violência explode nas quebradas do meio.`,
+    steps:[
+      { t:"Três facções menores avançam sobre o território órfão do cs ao mesmo tempo. Você tem uma equipe só.",
+        c:[
+          { l:"Blindar as escolas e postos de saúde primeiro", p:.8,
+            w:{ t:"Enquanto os bandidos disputavam esquina, você garantiu que criança fosse pra aula e doente fosse atendido. A comunidade viu de que lado você estava. Rep que dinheiro não compra.", m:24, x:14, rp:6 },
+            f:{ t:"Faltou gente pra tudo. Uma escola fechou dois dias por tiroteio. Você fez o que pôde, mas a manchete foi ruim.", m:12, x:6, rp:-2 } },
+          { l:"Ocupar rápido o antigo QG como base avançada", p:.7, tag:"gear",
+            w:{ t:"Farda hasteada onde antes era a Serpente. Símbolo poderoso: os oportunistas recuaram só de ver a ocupação. Território virou presença do Estado.", m:22, x:16, rp:4 },
+            f:{ t:"Ocupar o prédio sem retaguarda foi expor a tropa. Pressão de todo lado por uma semana até chegar reforço.", m:14, x:8, h:-6 } },
+        ]},
+    ]},
+  { id:"a3m5", camp:true, act:3, side:"pl", rank:[0,3], requires:["a3m4"], title:"Promoção e Preço", risk:"baixo", pay:"R$ 41–73 mil",
+    desc:`A queda do cs te colocou no páteo de honra. Promoção à vista — e com ela, os holofotes. A imprensa quer o rosto de quem derrubou a Serpente. ${CH.par}, recuperado, te observa de longe.`,
+    steps:[
+      { t:"Coletiva marcada. Como você conduz o momento que pode te lançar — ou te expor?",
+        c:[
+          { l:"Dividir o crédito com a equipe e o Ferraz", p:.85,
+            w:{ t:`Você citou cada nome, principalmente o de ${CH.par}, "que levou um tiro por essa cidade". A tropa te seguiria pro inferno depois disso. Liderança não se decreta — se conquista assim.`, x:14, rp:6, A:2 },
+            f:{ t:"O discurso saiu engessado e a imprensa preferiu focar no que faltou. Nada demais — mas a chance de ouro passou meio batida.", x:6, rp:1 } },
+          { l:"Assumir os louros: o momento é seu", p:.7,
+            w:{ t:"Você brilhou sozinho no palco. Virou nome nacional da segurança pública. O custo? Na volta ao quartel, os olhares da equipe estavam mais frios. Fama tem fatura.", x:16, rp:4, R:1, A:-1 },
+            f:{ t:"O protagonismo soou como vaidade e um repórter cutucou: 'E os erros da operação?'. O brilho embaçou rápido.", x:6, rp:-1, R:1 } },
+        ]},
+    ]},
+);
 // ---------- MISSÕES ADICIONAIS (v9 — progressão mais longa) ----------
 MISSIONS.push(
   // PM — patrulha
@@ -5455,7 +5625,11 @@ export default function App() {
       if (c.side === "pl" && c.campaign) {
         const cp = c.campaign;
         if (a.d) cp.dirty += a.d;
-        if (a.flags && Object.keys(a.flags).length) Object.assign(cp.flags, a.flags);
+        if (a.flags && Object.keys(a.flags).length) {
+          Object.assign(cp.flags, a.flags);
+          // Ferraz baleado: fica 3 semanas fora (o efeito de parceria é suspenso até lá)
+          if (a.flags.ferraz_ferido) { cp.flags.ferraz_ferido_ate = c.week + 3; delete cp.flags.ferraz_ferido; c.ally = clamp(c.ally, -3, 1); chronPush(c, 3, c.week, `${CH.par} foi baleado numa emboscada do cs`, "tra"); }
+        }
         if (mis.camp && !cp.done.includes(mis.id)) {
           cp.done.push(mis.id);
           chronPush(c, 2, c.week, `Capítulo cumprido: ${mis.title}`, "miss");
@@ -5596,11 +5770,18 @@ export default function App() {
       updateCr(c => { c.ending = "expulso"; c.event = null; return c; });
       return;
     }
+    // Julgamento: sem caixa dois suficiente, o blefe custa a carreira
+    if (choice.special === "expel" && (!cr.campaign || cr.campaign.dirty < 200)) {
+      updateCr(c => { c.log = choice.r; c.ending = "expulso"; c.event = null; return c; });
+      return;
+    }
     updateCr(c => {
       if (choice.cost && c.cash < choice.cost) return c;
       if (choice.cost) c.cash -= choice.cost;
       if (choice.special === "clean") { c.corr = 0; if (c.side === "pl") c.rep = clamp(c.rep - 8, -10, 100); }
       if (choice.special === "cool") c.heat = clamp(c.heat - 30, 0, 100);
+      if (choice.special === "abafou" && c.campaign) { c.campaign.dirty = Math.max(0, c.campaign.dirty + (choice.fx.campDirty || 0)); c.campaign.flags.abafou = true; chronPush(c, 3, c.week, "Comprou o silêncio da Corregedoria", "tra"); }
+      c.corr = Math.max(0, c.corr + (choice.fx.corr || 0));
       c.merit = Math.max(0, c.merit + (choice.fx.x || 0));
       c.log = choice.r;
       c.event = null;
@@ -5727,7 +5908,7 @@ export default function App() {
             cp.flags.rocha1 = true;
             sig.push(`⚖ Um bilhete sem assinatura na sua mesa: "Papel aceita tudo. Ficha, não." — dizem que o ${CAMP_CAST.rocha} manda esses quando começa a olhar pra alguém.`);
           }
-          if (c.corr >= 6) {
+          if (c.corr >= 6 && c.corr < 9) {
             if (!cp.flags.rocha2) {
               cp.flags.rocha2 = true;
               sig.push(`⚖ CORREGEDORIA: ${CAMP_CAST.rocha} abriu investigação preliminar sobre você. A partir de agora, todo relatório seu passa pela lupa dele.`);
@@ -5736,6 +5917,12 @@ export default function App() {
               c.merit = Math.max(0, c.merit - 8);
               sig.push("⚖ A Corregedoria travou um relatório seu 'para conferência'. O mérito era seu — ficou na gaveta. (−8 mérito)");
             }
+          }
+          // ferimento do parceiro: enquanto ferido, sem irmandade (o efeito de ally é anulado na moral e no combate via flag)
+          if (cp.flags.ferraz_ferido_ate && c.week >= cp.flags.ferraz_ferido_ate) {
+            delete cp.flags.ferraz_ferido_ate;
+            sig.push(`🚑 ${CH.par} voltou à ativa, ainda mancando. "Perdi três semanas numa cama de hospital pensando em quem puxou aquele gatilho. Vamos terminar isso." (parceria restaurada)`);
+            chronPush(c, 2, c.week, `${CH.par} recebeu alta e voltou à ativa`, "red");
           }
         }
         if (sig.length) c.log = (c.log ? c.log + "\n" : "") + sig.join("\n");
@@ -5773,7 +5960,21 @@ export default function App() {
         if (c.rank === 4 && c.merit >= THRESH[4]) c.final = true;
       }
       // eventos
-      if (!c.ending && c.side === "pl" && c.corr >= 3 && Math.random() < 0.35) {
+      // JULGAMENTO DA CORREGEDORIA (campanha): ficha muito suja força a mão do Rocha
+      if (!c.ending && !c.event && c.side === "pl" && c.campaign && c.corr >= 9 && !c.campaign.flags.abafou) {
+        c.event = {
+          t:`⚖ JULGAMENTO: ${CAMP_CAST.rocha} formou a comissão. Provas em cima da mesa, sua ficha aberta na frente de todos. "É a sua palavra contra os documentos, ${c.pname}. E documento não gagueja."`,
+          c:[
+            (c.campaign.dirty >= 200
+              ? { l:`Comprar a comissão por dentro (R$ 200 mil do caixa dois)`, fx:{ campDirty:-200, corr:-6 }, r:"Três assinaturas mudaram de ideia da noite pro dia. O processo 'não encontrou elementos'. Rocha te olhou sabendo — e guardou pra depois.", special:"abafou" }
+              : { l:`Comprar a comissão (precisa R$ 200 mil no caixa dois)`, fx:{}, r:"Você não tinha o suficiente escondido. O blefe ruiu na frente da comissão.", special:"expel" }),
+            { l:"Encarar a comissão de peito aberto", fx:{}, r: Math.random() < 0.35
+                ? "Sem confissão e com uma dúvida razoável, arquivaram por ora. Você suou a farda inteira."
+                : "EXPULSO", special:"risk" },
+          ],
+        };
+      }
+      if (!c.event && !c.ending && c.side === "pl" && c.corr >= 3 && Math.random() < 0.35) {
         if (c.britoShield) {
           c.britoShield = false;
           c.log = (c.log ? c.log + "\n" : "") + "🛡 O ESCUDO: uma denúncia chegou à corregedoria — e o Sgt. Brito assumiu. 'Eu autorizei a operação.' Você deve uma ao velho. E ele só tinha essa.";
